@@ -1,0 +1,28 @@
+{
+  "name": "my-threejs-game-ts",
+  "version": "1.0.0",
+  "description": "A Three.js game with TypeScript",
+  "main": "src/main.ts",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --outfile=public/bundle.js",
+    "dev": "esbuild src/main.ts --bundle --outfile=public/bundle.js --watch",
+    "serve": "npm run dev & npx serve public",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "threejs",
+    "game",
+    "typescript"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "three": "^0.162.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.162.0",
+    "esbuild": "^0.20.1",
+    "serve": "^14.2.4",
+    "typescript": "^5.3.3"
+  }
+}

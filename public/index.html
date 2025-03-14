@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>π-Tempest: Circular Chaos</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000000;
+            cursor: crosshair;
+        }
+        canvas {
+            display: block;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #00ffaa;
+            font-family: monospace;
+            font-size: 24px;
+            text-align: center;
+        }
+        .pi-loading {
+            display: inline-block;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div>Loading π-TEMPEST</div>
+        <div class="pi-loading">π π π</div>
+    </div>
+    
+    <!-- Load the bundled JavaScript file -->
+    <script src="bundle.js"></script>
+    
+    <script>
+        // Hide loading when ready
+        window.addEventListener('load', () => {
+            const loadingElement = document.getElementById('loading');
+            if (loadingElement) {
+                loadingElement.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
