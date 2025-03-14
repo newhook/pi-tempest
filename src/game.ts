@@ -392,6 +392,82 @@ export class Game {
     }
   }
 
+  private createExplosion(position: THREE.Vector3, color: THREE.Color): void {
+    const particleCount = 50;
+    const particles = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = new Float32Array(particleCount * 3);
+    const alphas = new Float32Array(particleCount);
+
+    for (let i = 0; i < particleCount; i++) {
+      positions[i * 3] = position.x;
+      positions[i * 3 + 1] = position.y;
+      positions[i * 3 + 2] = position.z;
+
+      // Random velocity for each particle
+      velocities[i * 3] = (Math.random() - 0.5) * 2;
+      velocities[i * 3 + 1] = (Math.random() - 0.5) * 2;
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 2;
+
+      // Initial alpha value
+      alphas[i] = 1.0;
+    }
+
+    particles.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    particles.setAttribute(
+      "velocity",
+      new THREE.BufferAttribute(velocities, 3)
+    );
+    particles.setAttribute("alpha", new THREE.BufferAttribute(alphas, 1));
+
+    const pMaterial = new THREE.PointsMaterial({
+      color: color,
+      size: 0.2,
+      transparent: true,
+      opacity: 1.0,
+      depthWrite: false, // Ensure particles are rendered with transparency
+    });
+
+    const particleSystem = new THREE.Points(particles, pMaterial);
+    this.sceneSetup.scene.add(particleSystem);
+
+    // Update particle positions and alpha values over time
+    const updateParticles = () => {
+      const positions = particles.attributes.position.array as Float32Array;
+      const velocities = particles.attributes.velocity.array as Float32Array;
+      const alphas = particles.attributes.alpha.array as Float32Array;
+
+      for (let i = 0; i < particleCount; i++) {
+        positions[i * 3] += velocities[i * 3] * 0.1;
+        positions[i * 3 + 1] += velocities[i * 3 + 1] * 0.1;
+        positions[i * 3 + 2] += velocities[i * 3 + 2] * 0.1;
+
+        // Decrease alpha value to create fading effect
+        alphas[i] -= 0.02;
+        if (alphas[i] < 0) alphas[i] = 0;
+      }
+
+      particles.attributes.position.needsUpdate = true;
+      particles.attributes.alpha.needsUpdate = true;
+
+      // Update material opacity based on alpha values
+      pMaterial.opacity = Math.max(...alphas);
+
+      // Continue updating particles until they are removed
+      if (this.sceneSetup.scene.children.includes(particleSystem)) {
+        requestAnimationFrame(updateParticles);
+      }
+    };
+
+    updateParticles();
+
+    // Remove particle system after a short duration
+    setTimeout(() => {
+      this.sceneSetup.scene.remove(particleSystem);
+    }, 1000);
+  }
+
+  // ...existing code...
   private checkBulletCollisions(): void {
     // Check each bullet against each enemy
     for (let i = this.gameState.bullets.length - 1; i >= 0; i--) {
@@ -410,6 +486,10 @@ export class Game {
           // Collision detected
           this.sceneSetup.scene.remove(enemy.mesh);
           this.gameState.enemies.splice(j, 1);
+
+          // Create explosion effect with enemy color
+          const enemyMaterial = enemy.mesh.material as THREE.MeshBasicMaterial;
+          this.createExplosion(enemy.mesh.position, enemyMaterial.color);
 
           // Calculate score based on enemy type (pi-based)
           const piMultiplier = 3.14 * this.gameState.currentLevel;
