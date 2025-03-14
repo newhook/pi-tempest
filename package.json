@@ -6,7 +6,7 @@
   "scripts": {
     "build": "esbuild src/main.ts --bundle --outfile=public/bundle.js",
     "dev": "esbuild src/main.ts --bundle --outfile=public/bundle.js --watch",
-    "serve": "npm run dev & npx serve public",
+    "serve": "esbuild src/main.ts --bundle --outfile=public/bundle.js --watch & npx serve public",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
