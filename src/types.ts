@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 
 export interface GameState {
   score: number;
@@ -18,6 +18,9 @@ export interface Enemy {
   speed: number;
   type: number; // Based on PI digit
   size: number;
+  hitPoints: number;
+  movementStyle: string;
+  direction?: THREE.Vector2; // Optional directional vector for linear movement
 }
 
 export interface Bullet {
