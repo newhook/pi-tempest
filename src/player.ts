@@ -1,11 +1,7 @@
 import * as THREE from "three";
 import { GameState } from "./types";
 
-export function createPlayer(
-  scene: THREE.Scene,
-  size: number,
-  levelRadius: number
-): THREE.Group {
+export function createPlayer(size: number, levelRadius: number): THREE.Group {
   // Create a group to hold all player parts
   const playerGroup = new THREE.Group();
 
@@ -36,7 +32,6 @@ export function createPlayer(
   // Position at the edge of circle at angle 0
   playerGroup.position.set(levelRadius, 0, 0);
 
-  scene.add(playerGroup);
   return playerGroup;
 }
 

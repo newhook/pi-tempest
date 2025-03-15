@@ -65,13 +65,14 @@ export class BloodMoon {
     this.moonGroup.add(this.glow);
     this.moonGroup.add(this.moon);
 
-    // Add the whole group to the scene
-    this.scene.add(this.moonGroup);
-
     // Start animation
     this.animate();
   }
-  
+
+  public enter(): void {
+    this.scene.add(this.moonGroup);
+  }
+
   /**
    * Move the blood moon to the center of the level and resize it
    * @param levelRadius The radius of the current level
@@ -79,44 +80,46 @@ export class BloodMoon {
   public moveToCenter(levelRadius: number): void {
     // Reset the group position to center
     this.moonGroup.position.set(0, 0, 0);
-    
+
     // Reset moon and glow positions within the group
     this.moon.position.set(0, 0, -10);
     this.glow.position.set(0, 0, -10.1);
-    
+
     // Reset crater positions
-    this.craters.forEach(crater => {
+    this.craters.forEach((crater) => {
       // Keep the crater's x/y offset but center their base position
       const currentX = crater.position.x;
       const currentY = crater.position.y;
-      
+
       // Calculate offset from parent position
-      const offsetX = currentX - (this.moonGroup.position.x + this.moon.position.x);
-      const offsetY = currentY - (this.moonGroup.position.y + this.moon.position.y);
-      
+      const offsetX =
+        currentX - (this.moonGroup.position.x + this.moon.position.x);
+      const offsetY =
+        currentY - (this.moonGroup.position.y + this.moon.position.y);
+
       // Set new position with offset preserved
       crater.position.set(
-        this.moon.position.x + offsetX, 
-        this.moon.position.y + offsetY, 
+        this.moon.position.x + offsetX,
+        this.moon.position.y + offsetY,
         -9.9
       );
     });
-    
+
     // Reset any ongoing animation
     if (this.animationFrame !== null) {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = requestAnimationFrame(() => this.animate());
     }
-    
+
     // Reset scale before expanding
     this.moonGroup.scale.set(1, 1, 1);
-    
+
     // Start expansion animation
     this.expandAnimation(levelRadius);
-    
+
     console.log("Blood Moon moved to center: ", this.moonGroup.position);
   }
-  
+
   /**
    * Animate the blood moon expanding to fill the level
    * @param levelRadius The radius to expand to
@@ -126,18 +129,19 @@ export class BloodMoon {
     const targetScale = levelRadius / 3.2; // Based on original moon size
     const duration = 1000; // 1 second for expansion
     const startTime = Date.now();
-    
+
     const animate = () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      
+
       // Ease-in function
       const easedProgress = progress * progress;
-      
+
       // Scale the moon group
-      const currentScale = originalScale + (targetScale - originalScale) * easedProgress;
+      const currentScale =
+        originalScale + (targetScale - originalScale) * easedProgress;
       this.moonGroup.scale.set(currentScale, currentScale, 1);
-      
+
       if (progress < 1) {
         this.animationFrame = requestAnimationFrame(animate);
       } else {
@@ -145,10 +149,10 @@ export class BloodMoon {
         this.isShrinking = false;
       }
     };
-    
+
     animate();
   }
-  
+
   /**
    * Start the shrinking animation as player flies toward center
    */
@@ -196,18 +200,18 @@ export class BloodMoon {
       this.fadeStart = Date.now();
     }
   }
-  
+
   /**
    * Immediately remove the blood moon from the scene
    * Use this for cleanup when transitioning between game modes
    */
-  public remove(): void {
+  public exit(): void {
     // Cancel any ongoing animation
     if (this.animationFrame !== null) {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
     }
-    
+
     // Remove from scene
     this.scene.remove(this.moonGroup);
   }
@@ -237,13 +241,13 @@ export class BloodMoon {
       // Remove moon group when fully faded out
       if (fadeProgress === 1) {
         this.scene.remove(this.moonGroup);
-        
+
         // Clean up animation frame to prevent memory leaks
         if (this.animationFrame !== null) {
           cancelAnimationFrame(this.animationFrame);
           this.animationFrame = null;
         }
-        
+
         return; // Stop animation loop
       }
     } else if (this.isShrinking) {
@@ -252,22 +256,24 @@ export class BloodMoon {
         1,
         (Date.now() - this.shrinkStart) / this.shrinkDuration
       );
-      
+
       // Ease-in-out function for smooth animation
-      const easedProgress = shrinkProgress < 0.5
-        ? 2 * shrinkProgress * shrinkProgress
-        : -1 + (4 - 2 * shrinkProgress) * shrinkProgress;
-        
+      const easedProgress =
+        shrinkProgress < 0.5
+          ? 2 * shrinkProgress * shrinkProgress
+          : -1 + (4 - 2 * shrinkProgress) * shrinkProgress;
+
       // Get current scale and reduce it
       const currentScale = this.moonGroup.scale.x;
       const finalScale = 0.2; // Shrink to 20% of expanded size
-      
+
       // Calculate new scale
-      const newScale = currentScale - (currentScale - finalScale) * easedProgress;
-      
+      const newScale =
+        currentScale - (currentScale - finalScale) * easedProgress;
+
       // Apply new scale
       this.moonGroup.scale.set(newScale, newScale, 1);
-      
+
       // When shrinking is complete, reset isShrinking
       if (shrinkProgress === 1) {
         this.isShrinking = false;
@@ -282,20 +288,16 @@ export class BloodMoon {
 
       // Only apply subtle wobble animation if the moon is at its original position
       // Check if we're at the original position or not
-      const isAtOriginalPosition = 
-        Math.abs(this.moonGroup.position.x - 7.2) < 0.1 && 
+      const isAtOriginalPosition =
+        Math.abs(this.moonGroup.position.x - 7.2) < 0.1 &&
         Math.abs(this.moonGroup.position.y - 7.2) < 0.1;
-        
+
       if (isAtOriginalPosition) {
         // Very subtle movement when at original position
         const wobbleX = Math.cos(time * 0.3) * 0.2;
         const wobbleY = Math.sin(time * 0.2) * 0.3;
-        
-        this.moonGroup.position.set(
-          7.2 + wobbleX, 
-          7.2 + wobbleY, 
-          0
-        );
+
+        this.moonGroup.position.set(7.2 + wobbleX, 7.2 + wobbleY, 0);
       }
     }
 

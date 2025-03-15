@@ -17,7 +17,7 @@ export class ActiveMode implements GameMode {
   private lastEnemyTime: number = 0;
   private level: THREE.Group;
   private levelRadius: number = 10;
-  private currentLevelType: string;
+  private currentLevelType: string = "circle";
   private bloodMoon: BloodMoon;
   private transitionInProgress: boolean = false;
   private keys = {
@@ -45,35 +45,18 @@ export class ActiveMode implements GameMode {
     this.gameState = gameState;
     this.clock = clock;
 
-    // Create level and determine its type
-    this.level = createLevel(
-      this.sceneSetup.scene,
-      this.gameState.currentLevel,
-      this.levelRadius
-    );
-    this.currentLevelType = this.getLevelType(this.gameState.currentLevel);
+    this.level = createLevel(this.gameState.currentLevel, this.levelRadius);
 
-    // Create player
-    this.player = createPlayer(
-      this.sceneSetup.scene,
-      this.modeState.playerSize,
-      this.levelRadius
-    );
-    this.player.visible = false; // Initially hidden, will be shown in enter()
+    this.player = createPlayer(this.modeState.playerSize, this.levelRadius);
 
-    // Create enemy manager
+    this.bloodMoon = new BloodMoon(this.sceneSetup.scene);
+
     this.enemyManager = new EnemyManager(
       this.sceneSetup.scene,
       this.gameState,
       this.modeState,
       this.levelRadius
     );
-
-    // Create the blood moon
-    this.bloodMoon = new BloodMoon(this.sceneSetup.scene);
-    setTimeout(() => {
-      this.bloodMoon.fadeOut();
-    }, 5000);
   }
 
   public getPlayer(): THREE.Group {
@@ -81,20 +64,34 @@ export class ActiveMode implements GameMode {
   }
 
   public enter(): void {
-    // Show player and enable gameplay
+    this.sceneSetup.scene.add(this.level);
+
+    // Ensure player is in the scene
+    this.sceneSetup.scene.add(this.player);
+
+    this.bloodMoon.enter();
+    setTimeout(() => {
+      this.bloodMoon.fadeOut();
+    }, 2000);
+
+    // Make player visible
     this.player.visible = true;
 
     // Reset enemy spawn timer to start spawning enemies
     this.lastEnemyTime = this.clock.getElapsedTime();
-
-    // Reset game elements for a fresh start
-    this.gameState.isGameOver = false;
 
     // Clear any existing enemies
     this.destroyAllEnemies();
 
     // Set up player movement based on keys
     this.setupKeyMovement();
+
+    // Reset player position
+    const playerPosition = this.getPositionOnLevelOutline(
+      this.modeState.playerAngle
+    );
+    this.player.position.set(playerPosition.x, playerPosition.y, 0);
+    this.player.lookAt(0, 0, 0);
   }
 
   private setupKeyMovement(): void {
@@ -114,6 +111,9 @@ export class ActiveMode implements GameMode {
   }
 
   public update(delta: number): void {
+    // Skip update if we don't have all required objects
+    if (!this.player || !this.enemyManager || !this.level) return;
+
     const elapsedTime = this.clock.getElapsedTime();
 
     // Create new enemies periodically
@@ -165,8 +165,10 @@ export class ActiveMode implements GameMode {
   }
 
   public exit(): void {
-    // Clean up player
-    this.sceneSetup.scene.remove(this.player);
+    // Clean up player if it exists
+    if (this.player) {
+      this.sceneSetup.scene.remove(this.player);
+    }
 
     // Remove all enemies
     this.destroyAllEnemies();
@@ -177,11 +179,13 @@ export class ActiveMode implements GameMode {
     }
     this.modeState.bullets = [];
 
-    // Remove level
-    this.sceneSetup.scene.remove(this.level);
+    // Remove level if it exists
+    if (this.level) {
+      this.sceneSetup.scene.remove(this.level);
+    }
 
-    // Immediately remove the blood moon
-    this.bloodMoon.remove();
+    // Immediately remove the blood moon if it exists
+    this.bloodMoon.exit();
 
     // Cancel any ongoing key movement interval
     if (this.keyMovementInterval) {
@@ -191,8 +195,8 @@ export class ActiveMode implements GameMode {
   }
 
   public shoot(): void {
-    // Don't shoot if in transition
-    if (this.transitionInProgress) return;
+    // Don't shoot if in transition or player doesn't exist
+    if (this.transitionInProgress || !this.player) return;
 
     // Play shooting sound
     const audio = new Audio("laser-1.mp3");
@@ -238,13 +242,13 @@ export class ActiveMode implements GameMode {
 
     // Destroy all enemies
     this.destroyAllEnemies();
-    
+
     // Move the blood moon to the center and expand it to fill the level
     this.bloodMoon.moveToCenter(this.levelRadius);
-    
+
     // Wait for the blood moon to expand
     await this.delay(1000);
-    
+
     // Start the blood moon shrinking animation
     this.bloodMoon.startShrinking();
 
@@ -544,12 +548,14 @@ export class ActiveMode implements GameMode {
   }
 
   private destroyAllEnemies(): void {
-    // Remove all enemies
-    for (const enemy of this.modeState.enemies) {
-      enemy.explode(); // Trigger explosion effect
-      this.sceneSetup.scene.remove(enemy.mesh);
+    // Remove all enemies if they exist
+    if (this.enemyManager && this.modeState.enemies.length > 0) {
+      for (const enemy of this.modeState.enemies) {
+        enemy.explode(); // Trigger explosion effect
+        this.sceneSetup.scene.remove(enemy.mesh);
+      }
+      this.modeState.enemies = [];
     }
-    this.modeState.enemies = [];
   }
 
   private async flyPlayerToBloodMoon(): Promise<void> {

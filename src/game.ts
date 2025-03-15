@@ -14,9 +14,9 @@ export class Game {
   private sceneSetup: SceneSetup;
   private clock: THREE.Clock;
 
-  // Current game mode
+  // Game modes
   private currentMode: GameMode;
-  private activeMode: ActiveMode | null = null;
+  private gameModes: Record<GameStatus, GameMode>;
 
   constructor() {
     // Initialize game state with only shared properties
@@ -37,9 +37,6 @@ export class Game {
     (window as any).sceneSetup = this.sceneSetup;
     (window as any).gameState = this.gameState;
 
-    // Initialize game modes
-    this.initGameModes();
-
     // Set up event handlers for game status changes
     this.setupGameStatusHandlers();
 
@@ -48,11 +45,17 @@ export class Game {
 
     // Handle window resize
     this.setupResizeHandler();
-  }
 
-  private initGameModes(): void {
-    // Create and set the initial mode (marquee)
-    this.currentMode = new MarqueeMode(this.sceneSetup, this.gameState);
+    this.gameModes = {
+      marquee: new MarqueeMode(this.sceneSetup, this.gameState),
+      active: new ActiveMode(this.sceneSetup, this.gameState, this.clock),
+      gameOver: new GameOverMode(this.sceneSetup, this.gameState),
+    };
+
+    // Set the current mode to the initial mode
+    this.currentMode = this.gameModes.marquee;
+
+    // Enter the initial mode
     this.currentMode.enter();
   }
 
@@ -139,25 +142,12 @@ export class Game {
   private changeGameMode(newStatus: GameStatus): void {
     // Exit the current mode
     this.currentMode.exit();
-    
+
     // Update game state
     this.gameState.gameStatus = newStatus;
-    
-    // Create the new mode
-    switch (newStatus) {
-      case "active":
-        this.activeMode = new ActiveMode(this.sceneSetup, this.gameState, this.clock);
-        this.currentMode = this.activeMode;
-        break;
-      case "gameOver":
-        this.currentMode = new GameOverMode(this.sceneSetup, this.gameState);
-        break;
-      case "marquee":
-        this.currentMode = new MarqueeMode(this.sceneSetup, this.gameState);
-        break;
-    }
-    
-    // Enter the new mode
+
+    // Set and enter the new mode
+    this.currentMode = this.gameModes[newStatus];
     this.currentMode.enter();
   }
 }

@@ -2,19 +2,81 @@ import * as THREE from "three";
 import { GameState } from "../types";
 import { GameMode } from "./gameMode";
 import { SceneSetup } from "../scene";
+import { BloodMoon } from "../bloodMoon";
 
 export class MarqueeMode implements GameMode {
   private sceneSetup: SceneSetup;
   private gameState: GameState;
+  private marqueeContainer: HTMLElement;
+  private bloodMoon: BloodMoon;
 
   constructor(sceneSetup: SceneSetup, gameState: GameState) {
     this.sceneSetup = sceneSetup;
     this.gameState = gameState;
+
+    // Create marquee screen container
+    const marqueeContainer = document.createElement("div");
+    marqueeContainer.id = "marquee-container";
+    marqueeContainer.style.position = "absolute";
+    marqueeContainer.style.top = "0";
+    marqueeContainer.style.left = "0";
+    marqueeContainer.style.width = "100%";
+    marqueeContainer.style.height = "100%";
+    marqueeContainer.style.display = "flex";
+    marqueeContainer.style.flexDirection = "column";
+    marqueeContainer.style.justifyContent = "center";
+    marqueeContainer.style.alignItems = "center";
+    marqueeContainer.style.color = "#FF0000";
+    marqueeContainer.style.fontFamily = "Arial, sans-serif";
+    marqueeContainer.style.textAlign = "center";
+    marqueeContainer.style.zIndex = "1000";
+
+    // Title
+    const titleElement = document.createElement("h1");
+    titleElement.textContent = "TEMPEST";
+    titleElement.style.fontSize = "64px";
+    titleElement.style.margin = "20px 0";
+    marqueeContainer.appendChild(titleElement);
+
+    // Start button
+    const startButton = document.createElement("button");
+    startButton.textContent = "START GAME";
+    startButton.style.padding = "15px 30px";
+    startButton.style.fontSize = "24px";
+    startButton.style.backgroundColor = "#FF0000";
+    startButton.style.color = "#FFFFFF";
+    startButton.style.border = "none";
+    startButton.style.borderRadius = "5px";
+    startButton.style.cursor = "pointer";
+    startButton.style.margin = "20px 0";
+
+    startButton.addEventListener("click", () => {
+      this.startGame();
+    });
+
+    marqueeContainer.appendChild(startButton);
+
+    // Instructions
+    const instructionsElement = document.createElement("div");
+    instructionsElement.style.fontSize = "18px";
+    instructionsElement.style.maxWidth = "600px";
+    instructionsElement.style.margin = "20px 0";
+    instructionsElement.innerHTML = `
+      <p>Use arrow keys or mouse to move</p>
+      <p>Click or press space to shoot</p>
+      <p>Press G to toggle ghost mode</p>
+      <p>Press SPACE or ENTER to start game</p>
+    `;
+    marqueeContainer.appendChild(instructionsElement);
+
+    this.marqueeContainer = marqueeContainer;
+
+    this.bloodMoon = new BloodMoon(this.sceneSetup.scene);
   }
 
   public enter(): void {
-    // Display marquee UI elements
-    this.displayMarqueeScreen();
+    document.body.appendChild(this.marqueeContainer);
+    this.bloodMoon.enter();
   }
 
   public update(delta: number): void {
@@ -26,11 +88,8 @@ export class MarqueeMode implements GameMode {
   }
 
   public exit(): void {
-    // Clean up any marquee-specific elements
-    const marqueeElement = document.getElementById("marquee-container");
-    if (marqueeElement) {
-      document.body.removeChild(marqueeElement);
-    }
+    document.body.removeChild(this.marqueeContainer);
+    this.bloodMoon.exit();
   }
 
   // Input handling methods
@@ -73,64 +132,5 @@ export class MarqueeMode implements GameMode {
         detail: { status: "active" },
       })
     );
-  }
-
-  private displayMarqueeScreen(): void {
-    // Create marquee screen container
-    const marqueeContainer = document.createElement("div");
-    marqueeContainer.id = "marquee-container";
-    marqueeContainer.style.position = "absolute";
-    marqueeContainer.style.top = "0";
-    marqueeContainer.style.left = "0";
-    marqueeContainer.style.width = "100%";
-    marqueeContainer.style.height = "100%";
-    marqueeContainer.style.display = "flex";
-    marqueeContainer.style.flexDirection = "column";
-    marqueeContainer.style.justifyContent = "center";
-    marqueeContainer.style.alignItems = "center";
-    marqueeContainer.style.color = "#FF0000";
-    marqueeContainer.style.fontFamily = "Arial, sans-serif";
-    marqueeContainer.style.textAlign = "center";
-    marqueeContainer.style.zIndex = "1000";
-
-    // Title
-    const titleElement = document.createElement("h1");
-    titleElement.textContent = "TEMPEST";
-    titleElement.style.fontSize = "64px";
-    titleElement.style.margin = "20px 0";
-    marqueeContainer.appendChild(titleElement);
-
-    // Start button
-    const startButton = document.createElement("button");
-    startButton.textContent = "START GAME";
-    startButton.style.padding = "15px 30px";
-    startButton.style.fontSize = "24px";
-    startButton.style.backgroundColor = "#FF0000";
-    startButton.style.color = "#FFFFFF";
-    startButton.style.border = "none";
-    startButton.style.borderRadius = "5px";
-    startButton.style.cursor = "pointer";
-    startButton.style.margin = "20px 0";
-    
-    startButton.addEventListener("click", () => {
-      this.startGame();
-    });
-    
-    marqueeContainer.appendChild(startButton);
-
-    // Instructions
-    const instructionsElement = document.createElement("div");
-    instructionsElement.style.fontSize = "18px";
-    instructionsElement.style.maxWidth = "600px";
-    instructionsElement.style.margin = "20px 0";
-    instructionsElement.innerHTML = `
-      <p>Use arrow keys or mouse to move</p>
-      <p>Click or press space to shoot</p>
-      <p>Press G to toggle ghost mode</p>
-      <p>Press SPACE or ENTER to start game</p>
-    `;
-    marqueeContainer.appendChild(instructionsElement);
-
-    document.body.appendChild(marqueeContainer);
   }
 }
