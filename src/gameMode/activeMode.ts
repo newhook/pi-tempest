@@ -20,6 +20,10 @@ export class ActiveMode implements GameMode {
   private currentLevelType: string;
   private bloodMoon: BloodMoon;
   private transitionInProgress: boolean = false;
+  private keys = {
+    left: false,
+    right: false,
+  };
 
   constructor(sceneSetup: SceneSetup, gameState: GameState, clock: THREE.Clock) {
     this.sceneSetup = sceneSetup;
@@ -69,6 +73,27 @@ export class ActiveMode implements GameMode {
 
     // Clear any existing enemies
     this.destroyAllEnemies();
+    
+    // Set up player movement based on keys
+    this.setupKeyMovement();
+  }
+  
+  private setupKeyMovement(): void {
+    // Update player angle based on keys in animation loop
+    setInterval(() => {
+      if (!this.gameState.isGameOver) {
+        const moveSpeed = 0.1;
+
+        if (this.keys.left) {
+          this.gameState.playerAngle -= moveSpeed;
+          this.normalizePlayerAngle();
+        }
+        if (this.keys.right) {
+          this.gameState.playerAngle += moveSpeed;
+          this.normalizePlayerAngle();
+        }
+      }
+    }, 16); // ~60fps
   }
 
   public update(delta: number): void {
@@ -531,5 +556,106 @@ export class ActiveMode implements GameMode {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  
+  private updatePlayerAngle(targetAngle: number): void {
+    // Set player angle directly
+    this.gameState.playerAngle = targetAngle;
+    this.normalizePlayerAngle();
+  }
+
+  private normalizePlayerAngle(): void {
+    // Normalize angle to be between 0 and 2π for calculations
+    while (this.gameState.playerAngle < 0)
+      this.gameState.playerAngle += Math.PI * 2;
+    while (this.gameState.playerAngle >= Math.PI * 2)
+      this.gameState.playerAngle -= Math.PI * 2;
+  }
+  
+  public handleKeyDown(event: KeyboardEvent): void {
+    if (!this.gameState.isGameOver) {
+      switch (event.key) {
+        case "ArrowLeft":
+        case "a":
+          this.keys.left = true;
+          break;
+        case "ArrowRight":
+        case "d":
+          this.keys.right = true;
+          break;
+        case " ":
+          this.shoot();
+          break;
+        case "l": // Add "l" key to force level transition
+          this.levelUp();
+          break;
+        case "g": // Add "g" key to toggle ghost mode
+          this.toggleGhostMode();
+          break;
+      }
+    }
+  }
+
+  public handleKeyUp(event: KeyboardEvent): void {
+    switch (event.key) {
+      case "ArrowLeft":
+      case "a":
+        this.keys.left = false;
+        break;
+      case "ArrowRight":
+      case "d":
+        this.keys.right = false;
+        break;
+    }
+  }
+
+  public handleMouseMove(event: MouseEvent): void {
+    if (!this.gameState.isGameOver) {
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+
+      const mouseX = event.clientX - centerX;
+      // Invert Y coordinate to fix the vertical inversion issue
+      const mouseY = -(event.clientY - centerY);
+
+      // Calculate angle to mouse position
+      const mouseAngle = Math.atan2(mouseY, mouseX);
+
+      // Update player angle
+      this.updatePlayerAngle(mouseAngle);
+    }
+  }
+
+  public handleClick(event: MouseEvent): void {
+    if (!this.gameState.isGameOver) {
+      this.shoot();
+    }
+  }
+
+  public handleTouchMove(event: TouchEvent): void {
+    if (!this.gameState.isGameOver && event.touches.length > 0) {
+      const touch = event.touches[0];
+
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+
+      const touchX = touch.clientX - centerX;
+      // Invert Y coordinate to fix the vertical inversion issue
+      const touchY = -(touch.clientY - centerY);
+
+      // Calculate angle to touch position
+      const touchAngle = Math.atan2(touchY, touchX);
+
+      // Update player angle
+      this.updatePlayerAngle(touchAngle);
+
+      event.preventDefault();
+    }
+  }
+
+  public handleTouchStart(event: TouchEvent): void {
+    if (!this.gameState.isGameOver) {
+      this.shoot();
+    }
   }
 }
