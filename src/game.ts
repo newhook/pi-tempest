@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GameState } from "./types";
+import { GameState, GameStatus } from "./types";
 import { SceneSetup, setupScene } from "./scene";
 import { createPlayer, setupPlayerControls, animatePlayer } from "./player";
 import { EnemyManager } from "./enemies";
@@ -35,7 +35,8 @@ export class Game {
       bullets: [],
       currentLevel: 1,
       isGameOver: false,
-      ghostMode: false, // Add ghost mode property
+      ghostMode: false,
+      gameStatus: "marquee",
     };
 
     // Set up clock for timing
@@ -47,6 +48,12 @@ export class Game {
 
     // Store sceneSetup on window for access from UI component
     (window as any).sceneSetup = this.sceneSetup;
+
+    // Store gameState on window for access from UI component
+    (window as any).gameState = this.gameState;
+
+    // Set up event handlers for game status changes
+    this.setupGameStatusHandlers();
 
     // Create level and determine its type
     this.level = createLevel(
@@ -381,6 +388,19 @@ export class Game {
   }
 
   private gameLoop = (): void => {
+    // Check game status before processing updates
+    if (this.gameState.gameStatus !== "active") {
+      // Still render the scene for visual effects
+      this.sceneSetup.renderer.render(
+        this.sceneSetup.scene,
+        this.sceneSetup.camera
+      );
+
+      // Continue the loop even in non-active states
+      requestAnimationFrame(this.gameLoop);
+      return;
+    }
+
     if (this.gameState.isGameOver) {
       return; // Stop animation loop if game is over
     }
@@ -672,7 +692,71 @@ export class Game {
   }
 
   private gameOver(): void {
+    // Don't trigger game over during marquee mode
+    if (this.gameState.gameStatus !== "active") return;
+
     this.gameState.isGameOver = true;
+    this.gameState.gameStatus = "gameOver";
+
+    // Dispatch game status change event
+    document.dispatchEvent(
+      new CustomEvent("gameStatusChanged", {
+        detail: { status: "gameOver" },
+      })
+    );
+
     showGameOver(this.gameState);
+  }
+
+  // Add method to set up game status event handlers
+  private setupGameStatusHandlers(): void {
+    // Listen for game status change events
+    document.addEventListener("gameStatusChanged", (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const newStatus = customEvent.detail?.status as GameStatus;
+
+      if (newStatus) {
+        this.handleGameStatusChange(newStatus);
+      }
+    });
+  }
+
+  // Handle changes to game status
+  private handleGameStatusChange(status: GameStatus): void {
+    // Update game state
+    this.gameState.gameStatus = status;
+
+    switch (status) {
+      case "marquee":
+        // Hide player in marquee mode
+        if (this.player) {
+          this.player.visible = false;
+        }
+
+        // Reset any necessary game elements
+        this.lastEnemyTime = Infinity; // Prevent enemies from spawning
+        break;
+
+      case "active":
+        // Show player and enable gameplay
+        if (this.player) {
+          this.player.visible = true;
+        }
+
+        // Reset enemy spawn timer to start spawning enemies
+        this.lastEnemyTime = this.clock.getElapsedTime();
+
+        // Reset game elements for a fresh start
+        this.gameState.isGameOver = false;
+
+        // Clear any existing enemies if restarting
+        this.destroyAllEnemies();
+        break;
+
+      case "gameOver":
+        // Stop game loop by setting isGameOver (already handled in gameOver method)
+        this.gameState.isGameOver = true;
+        break;
+    }
   }
 }
