@@ -12,8 +12,21 @@ export class Enemy {
   public hitPoints: number;
   public movementStyle: string;
   public direction?: THREE.Vector2;
+  // For spoke movement
+  public spokeIndex?: number;
+  public spokeCrossingDirection?: number;
+  public spokeCrossingSpeed?: number;
   private gameState: GameState;
   private scene: THREE.Scene;
+  // Number of spokes in the current level (needed for spoke movement)
+  private numSpokes: number = 8;
+  public pathParams?: {
+    startAngle: number;
+    spiralTightness: number;
+    waveAmplitude: number;
+    waveFrequency: number;
+    pathOffset: number;
+  };
 
   constructor(
     mesh: THREE.Mesh,
@@ -42,38 +55,214 @@ export class Enemy {
   }
 
   // Update enemy position based on movement style
-  update(delta: number, levelRadius: number): void {
-    // Update angle based on movement style
-    switch (this.movementStyle) {
-      case "zigzag":
-        this.angle += Math.sin(this.distanceFromCenter / 10) * 0.1;
-        break;
-      case "circular":
-        this.angle += delta * 0.5;
-        break;
-      case "linear":
-      default:
-        // No angle change for linear movement
-        break;
+  update(delta: number, levelRadius: number, numSpokes: number = 8): void {
+    // Store number of spokes for spoke-based movement
+    if (
+      this.movementStyle === "spoke" ||
+      this.movementStyle === "spokeCrossing"
+    ) {
+      this.numSpokes = numSpokes;
     }
 
-    // Increment distance from center for radial movement
+    // Increment distance from center for all movement types
     this.distanceFromCenter += this.speed * delta * 30;
 
     // Calculate new position based on movement style
-    let x, y;
-    
-    if (this.movementStyle === "linear" && this.direction) {
-      // For linear movement with direction vector, move in straight line
-      x = this.mesh.position.x + this.direction.x * this.speed * delta * 30;
-      y = this.mesh.position.y + this.direction.y * this.speed * delta * 30;
-      
-      // Update distance from center for boundary checking
-      this.distanceFromCenter = Math.sqrt(x * x + y * y);
-    } else {
-      // For radial movement styles (zigzag, circular, default linear without direction)
-      x = Math.cos(this.angle) * this.distanceFromCenter;
-      y = Math.sin(this.angle) * this.distanceFromCenter;
+    let x: number, y: number;
+
+    switch (this.movementStyle) {
+      case "zigzag":
+        this.angle += Math.sin(this.distanceFromCenter / 10) * 0.1;
+        x = Math.cos(this.angle) * this.distanceFromCenter;
+        y = Math.sin(this.angle) * this.distanceFromCenter;
+        break;
+
+      case "circular":
+        this.angle += delta * 0.5;
+        x = Math.cos(this.angle) * this.distanceFromCenter;
+        y = Math.sin(this.angle) * this.distanceFromCenter;
+        break;
+
+      case "spiral":
+        // Spiral path - angle changes as distance increases
+        if (this.pathParams) {
+          this.angle =
+            this.pathParams.startAngle +
+            this.distanceFromCenter * this.pathParams.spiralTightness;
+          x = Math.cos(this.angle) * this.distanceFromCenter;
+          y = Math.sin(this.angle) * this.distanceFromCenter;
+        } else {
+          x = Math.cos(this.angle) * this.distanceFromCenter;
+          y = Math.sin(this.angle) * this.distanceFromCenter;
+        }
+        break;
+
+      case "wave":
+        // Wave path - sinusoidal movement
+        if (this.pathParams) {
+          // Base angle determines the spoke we're moving along
+          const baseAngle = this.pathParams.startAngle;
+          // Add sine wave modulation to angle
+          const waveOffset =
+            (Math.sin(
+              (this.distanceFromCenter * this.pathParams.waveFrequency) /
+                levelRadius
+            ) *
+              this.pathParams.waveAmplitude) /
+            levelRadius;
+
+          this.angle = baseAngle + waveOffset;
+          x = Math.cos(this.angle) * this.distanceFromCenter;
+          y = Math.sin(this.angle) * this.distanceFromCenter;
+        } else {
+          x = Math.cos(this.angle) * this.distanceFromCenter;
+          y = Math.sin(this.angle) * this.distanceFromCenter;
+        }
+        break;
+
+      case "pi":
+        // Pi symbol path
+        if (this.pathParams) {
+          // Calculate position along pi symbol
+          // The pi symbol consists of:
+          // 1. A horizontal bar at the top
+          // 2. Two vertical lines coming down from the bar
+
+          // Normalize distance to create pi symbol within level radius
+          const normalizedDist = this.distanceFromCenter / levelRadius;
+
+          if (normalizedDist < 0.3) {
+            // Initial approach from center
+            x =
+              this.pathParams.startAngle < Math.PI
+                ? -normalizedDist * levelRadius * 0.5
+                : normalizedDist * levelRadius * 0.5;
+            y = -normalizedDist * levelRadius * 0.5;
+          } else if (normalizedDist < 0.5) {
+            // Moving to horizontal bar position
+            const t = (normalizedDist - 0.3) / 0.2;
+            x =
+              this.pathParams.startAngle < Math.PI
+                ? -levelRadius * 0.5 + t * levelRadius
+                : levelRadius * 0.5 - t * levelRadius;
+            y = -levelRadius * 0.15;
+          } else {
+            // Moving down vertical line
+            const legPosition =
+              this.pathParams.startAngle < Math.PI * 0.67
+                ? -levelRadius * 0.4
+                : this.pathParams.startAngle < Math.PI * 1.33
+                ? 0
+                : levelRadius * 0.4;
+            x = legPosition;
+            y =
+              -levelRadius * 0.15 - (normalizedDist - 0.5) * levelRadius * 0.85;
+          }
+
+          // Update angle for proper orientation
+          this.angle = Math.atan2(y, x);
+        } else {
+          x = Math.cos(this.angle) * this.distanceFromCenter;
+          y = Math.sin(this.angle) * this.distanceFromCenter;
+        }
+        break;
+
+      case "star":
+        // Star path
+        if (this.pathParams) {
+          // Number of star points increases with level
+          const starPoints =
+            3 + (Math.floor(this.pathParams.waveFrequency * 2) % 5);
+          const pointAngle = (Math.PI * 2) / starPoints;
+
+          // Calculate which point we're moving toward
+          const pointIndex = Math.floor(
+            (this.pathParams.startAngle / (Math.PI * 2)) * starPoints
+          );
+          const nextPointIndex = (pointIndex + 1) % starPoints;
+
+          // Calculate angle to current and next point
+          const currentPointAngle = pointIndex * pointAngle;
+          const nextPointAngle = nextPointIndex * pointAngle;
+
+          // Interpolate between inner and outer radius
+          const innerRadius = levelRadius * 0.4;
+          const outerRadius = levelRadius;
+
+          // Determine if we're moving to outer point or inner corner
+          const toOuter =
+            Math.floor((this.distanceFromCenter / levelRadius) * 10) % 2 === 0;
+
+          if (toOuter) {
+            // Moving to outer point
+            const targetAngle = currentPointAngle;
+            this.angle = targetAngle;
+          } else {
+            // Moving to inner corner
+            const targetAngle = currentPointAngle + pointAngle / 2;
+            this.angle = targetAngle;
+          }
+
+          const currentRadius = toOuter
+            ? innerRadius +
+              ((outerRadius - innerRadius) *
+                (this.distanceFromCenter % (levelRadius / 5))) /
+                (levelRadius / 5)
+            : outerRadius -
+              ((outerRadius - innerRadius) *
+                (this.distanceFromCenter % (levelRadius / 5))) /
+                (levelRadius / 5);
+
+          x = Math.cos(this.angle) * currentRadius;
+          y = Math.sin(this.angle) * currentRadius;
+        } else {
+          x = Math.cos(this.angle) * this.distanceFromCenter;
+          y = Math.sin(this.angle) * this.distanceFromCenter;
+        }
+        break;
+
+      case "spoke":
+        // Default spoke movement - just move outward along the spoke
+        x = Math.cos(this.angle) * this.distanceFromCenter;
+        y = Math.sin(this.angle) * this.distanceFromCenter;
+        break;
+
+      case "spokeCrossing":
+        // Handle spoke crossing movement
+        if (this.distanceFromCenter > levelRadius * 0.3) {
+          // Calculate crossover effect based on distance from center
+          const crossFactor = Math.min(
+            1,
+            (this.distanceFromCenter / levelRadius) * 2
+          );
+
+          // Gradually shift the angle based on distance from center
+          this.angle +=
+            this.spokeCrossingDirection! *
+            this.spokeCrossingSpeed! *
+            crossFactor *
+            delta *
+            10;
+        }
+        x = Math.cos(this.angle) * this.distanceFromCenter;
+        y = Math.sin(this.angle) * this.distanceFromCenter;
+        break;
+
+      case "linear":
+        // Linear movement with direction vector
+        if (this.direction) {
+          x = this.mesh.position.x + this.direction.x * this.speed * delta * 30;
+          y = this.mesh.position.y + this.direction.y * this.speed * delta * 30;
+          this.distanceFromCenter = Math.sqrt(x * x + y * y);
+        } else {
+          x = Math.cos(this.angle) * this.distanceFromCenter;
+          y = Math.sin(this.angle) * this.distanceFromCenter;
+        }
+        break;
+
+      default:
+        x = Math.cos(this.angle) * this.distanceFromCenter;
+        y = Math.sin(this.angle) * this.distanceFromCenter;
     }
 
     // Apply position
@@ -96,12 +285,12 @@ export class Enemy {
   // Check collision with player
   checkCollision(playerPos: THREE.Vector3, playerRadius: number): boolean {
     const enemyPos = this.mesh.position;
-    
+
     // Calculate distance between player and enemy
     const dx = playerPos.x - enemyPos.x;
     const dy = playerPos.y - enemyPos.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    
+
     // Check collision
     return distance < playerRadius + this.size;
   }
@@ -110,22 +299,22 @@ export class Enemy {
   explode(): void {
     // Get enemy material and color
     const enemyMaterial = this.mesh.material as THREE.MeshStandardMaterial;
-    
+
     // Create explosion particles
     this.createExplosion(this.mesh.position, enemyMaterial.color);
-    
+
     // For sphere type enemies, create smaller spheres on explosion
     if (this.type === 0) {
       this.createSmallerSpheres(this.mesh.position);
     }
-    
+
     // Play explosion sound
     const audio = new Audio("explosion-1.mp3");
     audio.play();
   }
 
   // Static methods for creating different types of enemies
-  
+
   // Get geometry based on enemy type
   static getGeometry(piDigit: number): THREE.BufferGeometry {
     // Different geometries based on PI digit
@@ -152,7 +341,7 @@ export class Enemy {
         return new THREE.SphereGeometry(0.4, 8, 8);
     }
   }
-  
+
   // Get behavior attributes based on enemy type
   static getBehavior(piDigit: number): {
     hitPoints: number;
@@ -194,7 +383,6 @@ export class Enemy {
         return { hitPoints: 1, speedMultiplier: 1.0, movementStyle: "linear" };
     }
   }
-
 
   // Create explosion particles
   private createExplosion(position: THREE.Vector3, color: THREE.Color): void {
@@ -316,7 +504,7 @@ export class Enemy {
         this.gameState,
         randomDirection
       );
-      
+
       this.scene.add(mesh);
       this.gameState.enemies.push(enemy);
     }

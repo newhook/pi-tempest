@@ -97,11 +97,11 @@ function createStarryBackground(scene: THREE.Scene): void {
 
   const stars = new THREE.Points(starsGeometry, starsMaterial);
   scene.add(stars);
-  
+
   // Create special shining stars
   const shiningStarCount = 25; // Number of special shining stars
   const shiningStars: THREE.Mesh[] = [];
-  
+
   for (let i = 0; i < shiningStarCount; i++) {
     // Random position for shining star - position them further away
     const radius = 70 + Math.random() * 40; // Increased minimum radius to push stars further out
@@ -111,15 +111,15 @@ function createStarryBackground(scene: THREE.Scene): void {
     const x = radius * Math.sin(phi) * Math.cos(theta);
     const y = radius * Math.sin(phi) * Math.sin(theta);
     const z = radius * Math.cos(phi);
-    
+
     // Create a much smaller glowing sprite for the shining star
     const size = 0.15 + Math.random() * 0.25; // Significantly reduced size
     const starGeometry = new THREE.PlaneGeometry(size, size);
-    
+
     // Random star color (white to blue-white to gold)
     const colorChoice = Math.random();
     let starColor;
-    
+
     if (colorChoice < 0.6) {
       // Blue-white star
       starColor = new THREE.Color(0xaaccff);
@@ -130,7 +130,7 @@ function createStarryBackground(scene: THREE.Scene): void {
       // Gold star (rare)
       starColor = new THREE.Color(0xffdd99);
     }
-    
+
     // Create material with glow
     const starMaterial = new THREE.MeshBasicMaterial({
       color: starColor,
@@ -138,21 +138,21 @@ function createStarryBackground(scene: THREE.Scene): void {
       opacity: 0.8, // Slightly reduced opacity
       side: THREE.DoubleSide,
     });
-    
+
     // Create the star mesh
     const star = new THREE.Mesh(starGeometry, starMaterial);
     star.position.set(x, y, z);
-    
+
     // Make star always face camera
     star.lookAt(0, 0, 0);
-    
+
     // Add unique properties for animation (more subtle animation)
     (star as any).pulseFactor = 0.3 + Math.random() * 0.7; // Reduced pulse intensity
     (star as any).pulseSpeed = 0.5 + Math.random() * 1.5; // Slower pulsing
     (star as any).initialOpacity = 0.6 + Math.random() * 0.3;
     (star as any).twinklePhase = Math.random() * Math.PI * 2;
     (star as any).initialSize = size;
-    
+
     shiningStars.push(star);
     scene.add(star);
   }
@@ -162,33 +162,33 @@ function createStarryBackground(scene: THREE.Scene): void {
     // Rotate regular star field
     stars.rotation.x += 0.0001;
     stars.rotation.y += 0.0002;
-    
+
     // Animate shining stars
     const time = Date.now() * 0.001;
-    
-    shiningStars.forEach(star => {
+
+    shiningStars.forEach((star) => {
       // Get customization factors
       const pulseFactor = (star as any).pulseFactor;
       const pulseSpeed = (star as any).pulseSpeed;
       const initialOpacity = (star as any).initialOpacity;
       const twinklePhase = (star as any).twinklePhase;
       const initialSize = (star as any).initialSize;
-      
+
       // Calculate shine effect (combination of sine waves for complexity)
       // Using subtler sine wave combination for more natural twinkling
-      const shine = 
-        0.6 * Math.sin(time * pulseSpeed + twinklePhase) + 
+      const shine =
+        0.6 * Math.sin(time * pulseSpeed + twinklePhase) +
         0.2 * Math.sin(time * pulseSpeed * 1.7 + twinklePhase * 2.3) +
         0.2 * Math.cos(time * pulseSpeed * 0.6 + twinklePhase * 1.1);
-      
+
       // Apply opacity effect - more subtle variation
-      (star.material as THREE.MeshBasicMaterial).opacity = 
+      (star.material as THREE.MeshBasicMaterial).opacity =
         initialOpacity * (0.75 + 0.25 * (0.5 + 0.5 * shine));
-      
+
       // Scale effect - reduced scale change
       const scale = 1 + 0.1 * Math.max(0, shine) * pulseFactor;
       star.scale.set(scale, scale, scale);
-      
+
       // Color shift only for gold stars and with very subtle variation
       if (star.material.color.r > 0.9 && star.material.color.g > 0.8) {
         // For gold stars only, add very subtle color variation

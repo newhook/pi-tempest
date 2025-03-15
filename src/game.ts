@@ -3,7 +3,7 @@ import { GameState } from "./types";
 import { SceneSetup, setupScene } from "./scene";
 import { createPlayer, setupPlayerControls, animatePlayer } from "./player";
 import { EnemyManager } from "./enemies";
-import { updateScore, showGameOver } from "./ui";
+import { updateScore, showGameOver, updateGhostModeDisplay } from "./ui";
 import { createLevel } from "./levels";
 
 export class Game {
@@ -31,6 +31,7 @@ export class Game {
       bullets: [],
       currentLevel: 1,
       isGameOver: false,
+      ghostMode: false, // Add ghost mode property
     };
 
     // Set up clock for timing
@@ -39,7 +40,7 @@ export class Game {
     // Set up scene and add renderer to DOM
     this.sceneSetup = setupScene();
     document.body.appendChild(this.sceneSetup.renderer.domElement);
-    
+
     // Store sceneSetup on window for access from UI component
     (window as any).sceneSetup = this.sceneSetup;
 
@@ -115,6 +116,12 @@ export class Game {
             break;
           case " ":
             this.shoot();
+            break;
+          case "l": // Add "l" key to force level transition
+            this.levelUp();
+            break;
+          case "g": // Add "g" key to toggle ghost mode
+            this.toggleGhostMode();
             break;
         }
       }
@@ -204,6 +211,41 @@ export class Game {
         }
       }
     }, 16); // ~60fps
+  }
+
+  // Add method to toggle ghost mode
+  private toggleGhostMode(): void {
+    this.gameState.ghostMode = !this.gameState.ghostMode;
+    console.log("toggleGhostMode", this.gameState.ghostMode);
+
+    // Update the UI display to show ghost mode status
+    updateGhostModeDisplay(this.gameState.ghostMode);
+
+    // Visual feedback for ghost mode
+    if (this.gameState.ghostMode) {
+      // Make player semi-transparent when ghost mode is active
+      this.player.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.material.opacity = 0.5;
+          object.material.transparent = true;
+        }
+      });
+
+      console.log("Ghost mode activated!");
+    } else {
+      // Restore player opacity when ghost mode is deactivated
+      this.player.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.material.opacity = 1.0;
+          object.material.transparent = false;
+        }
+        if (object instanceof THREE.Mesh) {
+          object.material.opacity = 1.0;
+          object.material.transparent = false;
+        }
+      });
+      console.log("Ghost mode deactivated!");
+    }
   }
 
   private updatePlayerAngleForLevelType(targetAngle: number): void {
@@ -344,12 +386,6 @@ export class Game {
       return; // Stop animation loop if game is over
     }
 
-    // Play background soundtrack
-    // const audio = new Audio("soundtrack-1.mp3");
-    // console.log(audio);
-    // audio.loop = true;
-    // audio.play();
-
     // Request next frame
     requestAnimationFrame(this.gameLoop);
 
@@ -371,8 +407,11 @@ export class Game {
     // Check for enemy-bullet collisions
     this.checkBulletCollisions();
 
-    // Check for player-enemy collisions
-    if (this.enemyManager.checkPlayerCollision(this.player)) {
+    // Check for player-enemy collisions (only if ghost mode is not active)
+    if (
+      !this.gameState.ghostMode &&
+      this.enemyManager.checkPlayerCollision(this.player)
+    ) {
       this.gameOver();
       return;
     }
@@ -433,10 +472,10 @@ export class Game {
 
         if (distance < enemy.size + 0.2) {
           // Collision detected
-          
+
           // Trigger enemy explosion (which handles effects and smaller spheres)
           enemy.explode();
-          
+
           // Remove the enemy after explosion triggered
           this.sceneSetup.scene.remove(enemy.mesh);
           this.gameState.enemies.splice(j, 1);
