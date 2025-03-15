@@ -1,11 +1,17 @@
 import { Game } from './game';
 import { setupUI } from './ui';
 
-// Initialize the UI
-setupUI();
+// Function to initialize the game
+function initGame() {
+  // Initialize the UI
+  setupUI();
 
-// Initialize the game
-const game = new Game();
+  // Initialize the game
+  const game = new Game();
 
-// Start the game
-game.start();
+  // Start the game loop
+  game.start();
+}
+
+// Start the game when the DOM is fully loaded
+document.addEventListener('DOMContentLoaded', initGame);
