@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GameState, Bullet } from "../types";
+import { GameState, ActiveModeState, Bullet } from "../types";
 import { GameMode } from "./gameMode";
 import { SceneSetup } from "../scene";
 import { EnemyManager } from "../enemies";
@@ -25,7 +25,7 @@ export class ActiveMode implements GameMode {
     right: false,
   };
   private keyMovementInterval: number | null = null;
-  
+
   // Active mode specific state
   private modeState: ActiveModeState = {
     playerSize: 0.5,
@@ -33,14 +33,18 @@ export class ActiveMode implements GameMode {
     enemySpeed: 0.03,
     enemies: [],
     bullets: [],
-    ghostMode: false
+    ghostMode: false,
   };
 
-  constructor(sceneSetup: SceneSetup, gameState: GameState, clock: THREE.Clock) {
+  constructor(
+    sceneSetup: SceneSetup,
+    gameState: GameState,
+    clock: THREE.Clock
+  ) {
     this.sceneSetup = sceneSetup;
     this.gameState = gameState;
     this.clock = clock;
-    
+
     // Create level and determine its type
     this.level = createLevel(
       this.sceneSetup.scene,
@@ -67,6 +71,9 @@ export class ActiveMode implements GameMode {
 
     // Create the blood moon
     this.bloodMoon = new BloodMoon(this.sceneSetup.scene);
+    setTimeout(() => {
+      this.bloodMoon.fadeOut();
+    }, 5000);
   }
 
   public getPlayer(): THREE.Group {
@@ -85,11 +92,11 @@ export class ActiveMode implements GameMode {
 
     // Clear any existing enemies
     this.destroyAllEnemies();
-    
+
     // Set up player movement based on keys
     this.setupKeyMovement();
   }
-  
+
   private setupKeyMovement(): void {
     // Update player angle based on keys in animation loop
     this.keyMovementInterval = window.setInterval(() => {
@@ -160,22 +167,22 @@ export class ActiveMode implements GameMode {
   public exit(): void {
     // Clean up player
     this.sceneSetup.scene.remove(this.player);
-    
+
     // Remove all enemies
     this.destroyAllEnemies();
-    
+
     // Remove all bullets
     for (const bullet of this.modeState.bullets) {
       this.sceneSetup.scene.remove(bullet.mesh);
     }
     this.modeState.bullets = [];
-    
+
     // Remove level
     this.sceneSetup.scene.remove(this.level);
-    
+
     // Immediately remove the blood moon
     this.bloodMoon.remove();
-    
+
     // Cancel any ongoing key movement interval
     if (this.keyMovementInterval) {
       clearInterval(this.keyMovementInterval);
@@ -186,7 +193,7 @@ export class ActiveMode implements GameMode {
   public shoot(): void {
     // Don't shoot if in transition
     if (this.transitionInProgress) return;
-    
+
     // Play shooting sound
     const audio = new Audio("laser-1.mp3");
     audio.play();
@@ -227,12 +234,21 @@ export class ActiveMode implements GameMode {
     this.showLevelCompletedText();
 
     // Wait a moment for user to read the text
-    await this.delay(1500);
+    await this.delay(1000);
 
     // Destroy all enemies
     this.destroyAllEnemies();
+    
+    // Move the blood moon to the center and expand it to fill the level
+    this.bloodMoon.moveToCenter(this.levelRadius);
+    
+    // Wait for the blood moon to expand
+    await this.delay(1000);
+    
+    // Start the blood moon shrinking animation
+    this.bloodMoon.startShrinking();
 
-    // Fly the player ship to the blood moon
+    // Fly the player ship to the blood moon (center)
     await this.flyPlayerToBloodMoon();
 
     // Increment level
@@ -261,7 +277,7 @@ export class ActiveMode implements GameMode {
     // Add a brief delay before ending the transition
     await this.delay(500);
 
-    // Fade out the blood moon if it exists
+    // Fade out the blood moon
     this.bloodMoon.fadeOut();
 
     // Give a brief period of invulnerability after level change
@@ -296,7 +312,7 @@ export class ActiveMode implements GameMode {
 
   public toggleGhostMode(): void {
     if (this.transitionInProgress) return;
-    
+
     this.modeState.ghostMode = !this.modeState.ghostMode;
 
     // Update the UI display to show ghost mode status
@@ -325,7 +341,7 @@ export class ActiveMode implements GameMode {
   private updateGhostModeDisplay(isActive: boolean): void {
     // Get existing ghost mode display or create a new one
     let ghostModeElement = document.getElementById("ghost-mode");
-    
+
     if (!ghostModeElement) {
       ghostModeElement = document.createElement("div");
       ghostModeElement.id = "ghost-mode";
@@ -337,7 +353,7 @@ export class ActiveMode implements GameMode {
       ghostModeElement.style.fontSize = "20px";
       document.body.appendChild(ghostModeElement);
     }
-    
+
     if (isActive) {
       ghostModeElement.textContent = "GHOST MODE: ACTIVE";
       ghostModeElement.style.display = "block";
@@ -557,12 +573,12 @@ export class ActiveMode implements GameMode {
             ? 2 * progress * progress
             : -1 + (4 - 2 * progress) * progress;
 
-        // Move player toward blood moon (center)
+        // Move player toward center of screen (where blood moon is)
         this.player.position.x = startPosition.x * (1 - easeProgress);
         this.player.position.y = startPosition.y * (1 - easeProgress);
         this.player.position.z = startPosition.z + easeProgress * 2; // Move slightly forward
 
-        // Shrink player as it approaches "distance"
+        // Shrink player as it approaches center
         const scale = 1 - easeProgress * 0.5;
         this.player.scale.set(scale, scale, scale);
 
@@ -588,7 +604,7 @@ export class ActiveMode implements GameMode {
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
-  
+
   private updatePlayerAngle(targetAngle: number): void {
     // Set player angle directly
     this.modeState.playerAngle = targetAngle;
@@ -602,7 +618,7 @@ export class ActiveMode implements GameMode {
     while (this.modeState.playerAngle >= Math.PI * 2)
       this.modeState.playerAngle -= Math.PI * 2;
   }
-  
+
   public handleKeyDown(event: KeyboardEvent): void {
     if (!this.gameState.isGameOver) {
       switch (event.key) {
