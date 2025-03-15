@@ -430,15 +430,13 @@ export class Game {
 
         if (distance < enemy.size + 0.2) {
           // Collision detected
+          
+          // Trigger enemy explosion (which handles effects and smaller spheres)
+          enemy.explode();
+          
+          // Remove the enemy after explosion triggered
           this.sceneSetup.scene.remove(enemy.mesh);
           this.gameState.enemies.splice(j, 1);
-
-          // Play explosion sound
-          const audio = new Audio("explosion-1.mp3");
-          audio.play();
-
-          // Trigger enemy-specific explosion behavior
-          this.enemyManager.handleEnemyExplosion(enemy);
 
           // Calculate score based on enemy type (pi-based)
           const piMultiplier = 3.14 * this.gameState.currentLevel;
