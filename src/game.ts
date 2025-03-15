@@ -5,6 +5,7 @@ import { createPlayer, setupPlayerControls, animatePlayer } from "./player";
 import { EnemyManager } from "./enemies";
 import { updateScore, showGameOver, updateGhostModeDisplay } from "./ui";
 import { createLevel } from "./levels";
+import { BloodMoon } from "./bloodMoon";
 
 export class Game {
   // Game components
@@ -15,6 +16,7 @@ export class Game {
   private level: THREE.Group;
   private levelRadius: number = 10;
   private currentLevelType: string;
+  private bloodMoon: BloodMoon;
 
   // Game timing
   private lastEnemyTime: number = 0;
@@ -70,6 +72,9 @@ export class Game {
       this.gameState,
       this.levelRadius
     );
+
+    // Create the blood moon
+    this.bloodMoon = new BloodMoon(this.sceneSetup.scene);
 
     // Handle window resize
     this.setupResizeHandler();
@@ -546,6 +551,9 @@ export class Game {
 
     // Add a brief delay before ending the transition
     await this.delay(500);
+
+    // Fade out the blood moon if it exists
+    this.bloodMoon.fadeOut();
 
     // Give a brief period of invulnerability after level change
     this.gameState.ghostMode = true;

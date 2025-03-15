@@ -1,11 +1,9 @@
 import * as THREE from "three";
-import { createBloodMoon } from "./bloodMoon";
 
 export interface SceneSetup {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
-  fadeOutBloodMoon: () => void;
 }
 
 export function setupScene(): SceneSetup {
@@ -41,13 +39,10 @@ export function setupScene(): SceneSetup {
   // Create starry background
   createStarryBackground(scene);
 
-  // Create stylized blood moon with fade-out capability
-  const fadeOutBloodMoon = createBloodMoon(scene);
-
   // Create subtle circular grid in background
   createCircularGrid(scene);
 
-  return { scene, camera, renderer, fadeOutBloodMoon };
+  return { scene, camera, renderer };
 }
 
 function createStarryBackground(scene: THREE.Scene): void {

@@ -1,123 +1,157 @@
 import * as THREE from "three";
 
-export function createBloodMoon(scene: THREE.Scene): () => void {
-  console.log("Creating blood moon");
-  // Create blood moon group
-  const moonGroup = new THREE.Group();
+export class BloodMoon {
+  private moonGroup: THREE.Group;
+  private moon: THREE.Mesh;
+  private glow: THREE.Mesh;
+  private craters: THREE.Mesh[] = [];
+  private scene: THREE.Scene;
 
-  // Parameters
-  const levelRadius = 10; // Match the game's circular level radius
-  const moonSize = 3.2; // Size of the moon
-  const moonPosition = { x: levelRadius * 0.72, y: levelRadius * 0.72, z: -10 }; // Position at edge of level
+  // Animation properties
+  private isFadingOut: boolean = false;
+  private fadeStart: number = 0;
+  private fadeDuration: number = 2000; // 2 seconds fade-out
+  private animationFrame: number | null = null;
 
-  // Create the main moon disc
-  const moonGeometry = new THREE.CircleGeometry(moonSize, 32);
-  const moonMaterial = new THREE.MeshBasicMaterial({
-    color: 0xaa0000, // Deep red base color
-    transparent: true,
-    opacity: 0.9,
-  });
-  const moon = new THREE.Mesh(moonGeometry, moonMaterial);
-  moon.position.set(moonPosition.x, moonPosition.y, moonPosition.z);
+  // Materials for opacity control
+  private moonMaterial: THREE.MeshBasicMaterial;
+  private glowMaterial: THREE.MeshBasicMaterial;
 
-  // Create outer glow
-  const glowSize = moonSize * 1.3;
-  const glowGeometry = new THREE.CircleGeometry(glowSize, 32);
-  const glowMaterial = new THREE.MeshBasicMaterial({
-    color: 0xff3333, // Brighter red for the glow
-    transparent: true,
-    opacity: 0.25,
-    blending: THREE.AdditiveBlending,
-  });
-  const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-  glow.position.set(moonPosition.x, moonPosition.y, moonPosition.z - 0.1);
+  constructor(scene: THREE.Scene) {
+    this.scene = scene;
+    this.moonGroup = new THREE.Group();
 
-  // Create surface details (craters)
-  const detailCount = 8;
-  const craters: THREE.Mesh[] = [];
+    // Parameters
+    const levelRadius = 10; // Match the game's circular level radius
+    const moonSize = 3.2; // Size of the moon
+    const moonPosition = {
+      x: levelRadius * 0.72,
+      y: levelRadius * 0.72,
+      z: -10,
+    }; // Position at edge of level
 
-  for (let i = 0; i < detailCount; i++) {
-    // Random position within the moon
-    const angle = Math.random() * Math.PI * 2;
-    const distance = Math.random() * moonSize * 0.7;
-    const x = moonPosition.x + Math.cos(angle) * distance;
-    const y = moonPosition.y + Math.sin(angle) * distance;
-
-    // Create crater
-    const craterSize = 0.2 + Math.random() * 0.6;
-    const craterGeometry = new THREE.CircleGeometry(craterSize, 16);
-    const craterMaterial = new THREE.MeshBasicMaterial({
-      color: 0x770000, // Darker red for craters
+    // Create the main moon disc
+    const moonGeometry = new THREE.CircleGeometry(moonSize, 32);
+    this.moonMaterial = new THREE.MeshBasicMaterial({
+      color: 0xaa0000, // Deep red base color
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.9,
     });
-    const crater = new THREE.Mesh(craterGeometry, craterMaterial);
-    crater.position.set(x, y, moonPosition.z + 0.1);
+    this.moon = new THREE.Mesh(moonGeometry, this.moonMaterial);
+    this.moon.position.set(moonPosition.x, moonPosition.y, moonPosition.z);
 
-    craters.push(crater);
-    moonGroup.add(crater);
+    // Create outer glow
+    const glowSize = moonSize * 1.3;
+    const glowGeometry = new THREE.CircleGeometry(glowSize, 32);
+    this.glowMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff3333, // Brighter red for the glow
+      transparent: true,
+      opacity: 0.25,
+      blending: THREE.AdditiveBlending,
+    });
+    this.glow = new THREE.Mesh(glowGeometry, this.glowMaterial);
+    this.glow.position.set(
+      moonPosition.x,
+      moonPosition.y,
+      moonPosition.z - 0.1
+    );
+
+    // Create surface details (craters)
+    this.createCraters(moonPosition, moonSize);
+
+    // Add moon and glow to the group
+    this.moonGroup.add(this.glow);
+    this.moonGroup.add(this.moon);
+
+    // Add the whole group to the scene
+    this.scene.add(this.moonGroup);
+
+    // Start animation
+    this.animate();
   }
 
-  // Add moon and glow to the group
-  moonGroup.add(glow);
-  moonGroup.add(moon);
+  /**
+   * Create craters on the blood moon
+   */
+  private createCraters(
+    moonPosition: { x: number; y: number; z: number },
+    moonSize: number
+  ): void {
+    const detailCount = 8;
 
-  // Add the whole group to the scene
-  scene.add(moonGroup);
+    for (let i = 0; i < detailCount; i++) {
+      // Random position within the moon
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * moonSize * 0.7;
+      const x = moonPosition.x + Math.cos(angle) * distance;
+      const y = moonPosition.y + Math.sin(angle) * distance;
 
-  // Fade-out state
-  let isFadingOut = false;
-  let fadeStart = 0;
-  const fadeDuration = 2000; // 2 seconds fade-out
+      // Create crater
+      const craterSize = 0.2 + Math.random() * 0.6;
+      const craterGeometry = new THREE.CircleGeometry(craterSize, 16);
+      const craterMaterial = new THREE.MeshBasicMaterial({
+        color: 0x770000, // Darker red for craters
+        transparent: true,
+        opacity: 0.8,
+      });
+      const crater = new THREE.Mesh(craterGeometry, craterMaterial);
+      crater.position.set(x, y, moonPosition.z + 0.1);
 
-  // Function to fade out the blood moon
-  const fadeOut = () => {
-    if (!isFadingOut) {
-      isFadingOut = true;
-      fadeStart = Date.now();
+      this.craters.push(crater);
+      this.moonGroup.add(crater);
     }
-  };
+  }
 
-  // Animate the blood moon with a subtle pulsing effect
-  function animateMoon() {
+  /**
+   * Fade out the blood moon
+   */
+  public fadeOut(): void {
+    if (!this.isFadingOut) {
+      this.isFadingOut = true;
+      this.fadeStart = Date.now();
+    }
+  }
+
+  /**
+   * Animate the blood moon
+   */
+  private animate(): void {
     const time = Date.now() * 0.001;
 
-    if (isFadingOut) {
+    if (this.isFadingOut) {
       // Calculate fade progress
-      const fadeProgress = Math.min(1, (Date.now() - fadeStart) / fadeDuration);
+      const fadeProgress = Math.min(
+        1,
+        (Date.now() - this.fadeStart) / this.fadeDuration
+      );
       const opacity = 1 - fadeProgress;
 
       // Apply opacity to all elements
-      moonMaterial.opacity = 0.9 * opacity;
-      glowMaterial.opacity = 0.25 * opacity;
+      this.moonMaterial.opacity = 0.9 * opacity;
+      this.glowMaterial.opacity = 0.25 * opacity;
 
-      craters.forEach((crater) => {
+      this.craters.forEach((crater) => {
         (crater.material as THREE.MeshBasicMaterial).opacity = 0.8 * opacity;
       });
 
       // Remove moon group when fully faded out
       if (fadeProgress === 1) {
-        scene.remove(moonGroup);
+        this.scene.remove(this.moonGroup);
         return; // Stop animation loop
       }
     } else {
       // Subtle pulsing effect on the glow
-      glow.scale.set(
+      this.glow.scale.set(
         1 + Math.sin(time * 0.5) * 0.05,
         1 + Math.sin(time * 0.5) * 0.05,
         1
       );
 
       // Very subtle movement
-      moonGroup.position.y = Math.sin(time * 0.2) * 0.3;
-      moonGroup.position.x = Math.cos(time * 0.3) * 0.2;
+      this.moonGroup.position.y = Math.sin(time * 0.2) * 0.3;
+      this.moonGroup.position.x = Math.cos(time * 0.3) * 0.2;
     }
 
-    requestAnimationFrame(animateMoon);
+    // requestAnimationFrame(this.animationFrame);
   }
-
-  animateMoon();
-
-  // Return the fade out function
-  return fadeOut;
 }
