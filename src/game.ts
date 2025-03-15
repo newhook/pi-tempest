@@ -14,10 +14,9 @@ export class Game {
   private sceneSetup: SceneSetup;
   private clock: THREE.Clock;
 
-  // Game modes
+  // Current game mode
   private currentMode: GameMode;
-  private gameModes: Record<GameStatus, GameMode>;
-  private activeMode: ActiveMode;
+  private activeMode: ActiveMode | null = null;
 
   constructor() {
     // Initialize game state
@@ -59,18 +58,8 @@ export class Game {
   }
 
   private initGameModes(): void {
-    // Create ActiveMode first so we can access its player
-    this.activeMode = new ActiveMode(this.sceneSetup, this.gameState, this.clock);
-    
-    // Create all game modes
-    this.gameModes = {
-      marquee: new MarqueeMode(this.sceneSetup, this.gameState),
-      active: this.activeMode,
-      gameOver: new GameOverMode(this.sceneSetup, this.gameState)
-    };
-
-    // Set initial mode
-    this.currentMode = this.gameModes[this.gameState.gameStatus];
+    // Create and set the initial mode (marquee)
+    this.currentMode = new MarqueeMode(this.sceneSetup, this.gameState);
     this.currentMode.enter();
   }
 
@@ -161,8 +150,21 @@ export class Game {
     // Update game state
     this.gameState.gameStatus = newStatus;
     
-    // Set and enter the new mode
-    this.currentMode = this.gameModes[newStatus];
+    // Create the new mode
+    switch (newStatus) {
+      case "active":
+        this.activeMode = new ActiveMode(this.sceneSetup, this.gameState, this.clock);
+        this.currentMode = this.activeMode;
+        break;
+      case "gameOver":
+        this.currentMode = new GameOverMode(this.sceneSetup, this.gameState);
+        break;
+      case "marquee":
+        this.currentMode = new MarqueeMode(this.sceneSetup, this.gameState);
+        break;
+    }
+    
+    // Enter the new mode
     this.currentMode.enter();
   }
 }

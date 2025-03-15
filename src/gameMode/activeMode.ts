@@ -24,6 +24,7 @@ export class ActiveMode implements GameMode {
     left: false,
     right: false,
   };
+  private keyMovementInterval: number | null = null;
 
   constructor(sceneSetup: SceneSetup, gameState: GameState, clock: THREE.Clock) {
     this.sceneSetup = sceneSetup;
@@ -80,7 +81,7 @@ export class ActiveMode implements GameMode {
   
   private setupKeyMovement(): void {
     // Update player angle based on keys in animation loop
-    setInterval(() => {
+    this.keyMovementInterval = window.setInterval(() => {
       if (!this.gameState.isGameOver) {
         const moveSpeed = 0.1;
 
@@ -148,8 +149,29 @@ export class ActiveMode implements GameMode {
   }
 
   public exit(): void {
-    // Hide player when exiting active mode
-    this.player.visible = false;
+    // Clean up player
+    this.sceneSetup.scene.remove(this.player);
+    
+    // Remove all enemies
+    this.destroyAllEnemies();
+    
+    // Remove all bullets
+    for (const bullet of this.gameState.bullets) {
+      this.sceneSetup.scene.remove(bullet.mesh);
+    }
+    this.gameState.bullets = [];
+    
+    // Remove level
+    this.sceneSetup.scene.remove(this.level);
+    
+    // Immediately remove the blood moon
+    this.bloodMoon.remove();
+    
+    // Cancel any ongoing key movement interval
+    if (this.keyMovementInterval) {
+      clearInterval(this.keyMovementInterval);
+      this.keyMovementInterval = null;
+    }
   }
 
   public shoot(): void {

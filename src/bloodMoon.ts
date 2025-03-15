@@ -111,6 +111,21 @@ export class BloodMoon {
       this.fadeStart = Date.now();
     }
   }
+  
+  /**
+   * Immediately remove the blood moon from the scene
+   * Use this for cleanup when transitioning between game modes
+   */
+  public remove(): void {
+    // Cancel any ongoing animation
+    if (this.animationFrame !== null) {
+      cancelAnimationFrame(this.animationFrame);
+      this.animationFrame = null;
+    }
+    
+    // Remove from scene
+    this.scene.remove(this.moonGroup);
+  }
 
   /**
    * Animate the blood moon
@@ -137,6 +152,13 @@ export class BloodMoon {
       // Remove moon group when fully faded out
       if (fadeProgress === 1) {
         this.scene.remove(this.moonGroup);
+        
+        // Clean up animation frame to prevent memory leaks
+        if (this.animationFrame !== null) {
+          cancelAnimationFrame(this.animationFrame);
+          this.animationFrame = null;
+        }
+        
         return; // Stop animation loop
       }
     } else {
@@ -152,6 +174,7 @@ export class BloodMoon {
       this.moonGroup.position.x = Math.cos(time * 0.3) * 0.2;
     }
 
-    // requestAnimationFrame(this.animationFrame);
+    // Continue animation loop
+    this.animationFrame = requestAnimationFrame(() => this.animate());
   }
 }
