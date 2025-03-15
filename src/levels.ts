@@ -1,11 +1,7 @@
 import * as THREE from "three";
 
 // Pi-inspired level designs
-export function createLevel(
-  scene: THREE.Scene,
-  levelNumber: number,
-  radius: number
-): THREE.Group {
+export function createLevel(levelNumber: number, radius: number): THREE.Group {
   const levelGroup = new THREE.Group();
 
   // Choose level type based on level number
@@ -66,7 +62,6 @@ export function createLevel(
   // Add Pi digits as background decoration
   addPiDigits(levelGroup, radius);
 
-  scene.add(levelGroup);
   return levelGroup;
 }
 
