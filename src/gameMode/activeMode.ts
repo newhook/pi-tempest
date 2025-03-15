@@ -187,8 +187,8 @@ export class ActiveMode implements GameMode {
     if (this.transitionInProgress || !this.player) return;
 
     // Play shooting sound
-    const audio = new Audio("laser-1.mp3");
-    audio.play();
+    // const audio = new Audio("laser-1.mp3");
+    // audio.play();
 
     // Create a bullet
     const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);

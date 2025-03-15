@@ -308,20 +308,20 @@ export class Enemy {
 
     // For sphere type enemies, create smaller spheres on explosion
     if (this.type === 0) {
-      this.createSmallerSpheres(this.mesh.position);
+      this.createAdditionalEnemies(this.mesh.position);
     }
 
     // Play explosion sound
-    const audio = new Audio("explosion-1.mp3");
-    audio.play();
+    // const audio = new Audio("explosion-1.mp3");
+    // audio.play();
   }
 
   // Static methods for creating different types of enemies
 
   // Get geometry based on enemy type
-  static getGeometry(piDigit: number): THREE.BufferGeometry {
+  static getGeometry(enemyType: number): THREE.BufferGeometry {
     // Different geometries based on PI digit
-    switch (piDigit) {
+    switch (enemyType) {
       case 1:
         return new THREE.TetrahedronGeometry(0.4);
       case 2:
@@ -346,12 +346,12 @@ export class Enemy {
   }
 
   // Get behavior attributes based on enemy type
-  static getBehavior(piDigit: number): {
+  static getBehavior(enemyType: number): {
     hitPoints: number;
     speedMultiplier: number;
     movementStyle: string;
   } {
-    switch (piDigit) {
+    switch (enemyType) {
       case 1:
         return { hitPoints: 1, speedMultiplier: 1.0, movementStyle: "linear" };
       case 2:
@@ -464,7 +464,7 @@ export class Enemy {
   }
 
   // Create smaller spheres on explosion
-  private createSmallerSpheres(position: THREE.Vector3): void {
+  private createAdditionalEnemies(position: THREE.Vector3): void {
     // Create three smaller spheres with random directions
     for (let i = 0; i < 3; i++) {
       // Create a smaller sphere enemy
