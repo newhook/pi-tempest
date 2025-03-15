@@ -80,21 +80,7 @@ export class ActiveMode implements GameMode {
     // Reset enemy spawn timer to start spawning enemies
     this.lastEnemyTime = this.clock.getElapsedTime();
 
-    // Clear any existing enemies
-    this.destroyAllEnemies();
-
     // Set up player movement based on keys
-    this.setupKeyMovement();
-
-    // Reset player position
-    const playerPosition = this.getPositionOnLevelOutline(
-      this.modeState.playerAngle
-    );
-    this.player.position.set(playerPosition.x, playerPosition.y, 0);
-    this.player.lookAt(0, 0, 0);
-  }
-
-  private setupKeyMovement(): void {
     // Update player angle based on keys in animation loop
     this.keyMovementInterval = window.setInterval(() => {
       const moveSpeed = 0.1;
@@ -108,12 +94,16 @@ export class ActiveMode implements GameMode {
         this.normalizePlayerAngle();
       }
     }, 16); // ~60fps
+
+    // Reset player position
+    const playerPosition = this.getPositionOnLevelOutline(
+      this.modeState.playerAngle
+    );
+    this.player.position.set(playerPosition.x, playerPosition.y, 0);
+    this.player.lookAt(0, 0, 0);
   }
 
   public update(delta: number): void {
-    // Skip update if we don't have all required objects
-    if (!this.player || !this.enemyManager || !this.level) return;
-
     const elapsedTime = this.clock.getElapsedTime();
 
     // Create new enemies periodically
@@ -166,9 +156,7 @@ export class ActiveMode implements GameMode {
 
   public exit(): void {
     // Clean up player if it exists
-    if (this.player) {
-      this.sceneSetup.scene.remove(this.player);
-    }
+    this.sceneSetup.scene.remove(this.player);
 
     // Remove all enemies
     this.destroyAllEnemies();
