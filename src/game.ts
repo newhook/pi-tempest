@@ -1,10 +1,6 @@
 import * as THREE from "three";
 import { GameState, GameStatus } from "./types";
 import { SceneSetup, setupScene } from "./scene";
-import { createPlayer } from "./player";
-import { EnemyManager } from "./enemies";
-import { createLevel } from "./levels";
-import { BloodMoon } from "./bloodMoon";
 
 // Import game modes
 import { GameMode } from "./gameMode/gameMode";
@@ -16,17 +12,12 @@ export class Game {
   // Game components
   private gameState: GameState;
   private sceneSetup: SceneSetup;
-  private player: THREE.Group;
-  private enemyManager: EnemyManager;
-  private level: THREE.Group;
-  private levelRadius: number = 10;
-  private currentLevelType: string;
-  private bloodMoon: BloodMoon;
   private clock: THREE.Clock;
 
   // Game modes
   private currentMode: GameMode;
   private gameModes: Record<GameStatus, GameMode>;
+  private activeMode: ActiveMode;
 
   constructor() {
     // Initialize game state
@@ -54,31 +45,6 @@ export class Game {
     (window as any).sceneSetup = this.sceneSetup;
     (window as any).gameState = this.gameState;
 
-    // Create level and determine its type
-    this.level = createLevel(
-      this.sceneSetup.scene,
-      this.gameState.currentLevel,
-      this.levelRadius
-    );
-    this.currentLevelType = this.getLevelType(this.gameState.currentLevel);
-
-    // Create player
-    this.player = createPlayer(
-      this.sceneSetup.scene,
-      this.gameState.playerSize,
-      this.levelRadius
-    );
-
-    // Create enemy manager
-    this.enemyManager = new EnemyManager(
-      this.sceneSetup.scene,
-      this.gameState,
-      this.levelRadius
-    );
-
-    // Create the blood moon
-    this.bloodMoon = new BloodMoon(this.sceneSetup.scene);
-
     // Initialize game modes
     this.initGameModes();
 
@@ -93,43 +59,19 @@ export class Game {
   }
 
   private initGameModes(): void {
+    // Create ActiveMode first so we can access its player
+    this.activeMode = new ActiveMode(this.sceneSetup, this.gameState, this.clock);
+    
     // Create all game modes
     this.gameModes = {
-      marquee: new MarqueeMode(this.sceneSetup, this.gameState, this.player),
-      active: new ActiveMode(
-        this.sceneSetup,
-        this.gameState,
-        this.player,
-        this.enemyManager,
-        this.level,
-        this.levelRadius,
-        this.currentLevelType,
-        this.bloodMoon,
-        this.clock
-      ),
-      gameOver: new GameOverMode(this.sceneSetup, this.gameState, this.player)
+      marquee: new MarqueeMode(this.sceneSetup, this.gameState),
+      active: this.activeMode,
+      gameOver: new GameOverMode(this.sceneSetup, this.gameState)
     };
 
     // Set initial mode
     this.currentMode = this.gameModes[this.gameState.gameStatus];
     this.currentMode.enter();
-  }
-
-  private getLevelType(levelNumber: number): string {
-    switch ((levelNumber - 1) % 5) {
-      case 0:
-        return "circle";
-      case 1:
-        return "spiral";
-      case 2:
-        return "star";
-      case 3:
-        return "pi";
-      case 4:
-        return "wave";
-      default:
-        return "circle";
-    }
   }
 
   private setupControls(): void {
@@ -153,17 +95,17 @@ export class Game {
             break;
           case " ":
             if (this.gameState.gameStatus === "active") {
-              (this.gameModes.active as ActiveMode).shoot();
+              this.activeMode.shoot();
             }
             break;
           case "l": // Add "l" key to force level transition
             if (this.gameState.gameStatus === "active") {
-              (this.gameModes.active as ActiveMode).levelUp();
+              this.activeMode.levelUp();
             }
             break;
           case "g": // Add "g" key to toggle ghost mode
             if (this.gameState.gameStatus === "active") {
-              (this.gameModes.active as ActiveMode).toggleGhostMode();
+              this.activeMode.toggleGhostMode();
             }
             break;
         }
@@ -204,7 +146,7 @@ export class Game {
     // Mouse click to shoot
     document.addEventListener("click", () => {
       if (!this.gameState.isGameOver && this.gameState.gameStatus === "active") {
-        (this.gameModes.active as ActiveMode).shoot();
+        this.activeMode.shoot();
       }
     });
 
@@ -239,7 +181,7 @@ export class Game {
     // Touch to shoot
     document.addEventListener("touchstart", () => {
       if (!this.gameState.isGameOver && this.gameState.gameStatus === "active") {
-        (this.gameModes.active as ActiveMode).shoot();
+        this.activeMode.shoot();
       }
     });
 
@@ -316,28 +258,11 @@ export class Game {
 
   // Handle changes to game mode
   private changeGameMode(newStatus: GameStatus): void {
-    const oldStatus = this.gameState.gameStatus;
-    
     // Exit the current mode
     this.currentMode.exit();
     
     // Update game state
     this.gameState.gameStatus = newStatus;
-    
-    // Update active mode with latest level info if transitioning to active mode
-    if (newStatus === "active" && this.level) {
-      this.gameModes.active = new ActiveMode(
-        this.sceneSetup,
-        this.gameState,
-        this.player,
-        this.enemyManager,
-        this.level,
-        this.levelRadius,
-        this.currentLevelType,
-        this.bloodMoon,
-        this.clock
-      );
-    }
     
     // Set and enter the new mode
     this.currentMode = this.gameModes[newStatus];

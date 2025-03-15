@@ -4,7 +4,7 @@ import { GameMode } from "./gameMode";
 import { SceneSetup } from "../scene";
 import { EnemyManager } from "../enemies";
 import { updateScore } from "../ui";
-import { animatePlayer } from "../player";
+import { createPlayer, animatePlayer } from "../player";
 import { BloodMoon } from "../bloodMoon";
 import { createLevel } from "../levels";
 
@@ -21,33 +21,45 @@ export class ActiveMode implements GameMode {
   private bloodMoon: BloodMoon;
   private transitionInProgress: boolean = false;
 
-  constructor(
-    sceneSetup: SceneSetup, 
-    gameState: GameState, 
-    player: THREE.Group, 
-    enemyManager: EnemyManager,
-    level: THREE.Group,
-    levelRadius: number,
-    levelType: string,
-    bloodMoon: BloodMoon,
-    clock: THREE.Clock
-  ) {
+  constructor(sceneSetup: SceneSetup, gameState: GameState, clock: THREE.Clock) {
     this.sceneSetup = sceneSetup;
     this.gameState = gameState;
-    this.player = player;
-    this.enemyManager = enemyManager;
-    this.level = level;
-    this.levelRadius = levelRadius;
-    this.currentLevelType = levelType;
-    this.bloodMoon = bloodMoon;
     this.clock = clock;
+    
+    // Create level and determine its type
+    this.level = createLevel(
+      this.sceneSetup.scene,
+      this.gameState.currentLevel,
+      this.levelRadius
+    );
+    this.currentLevelType = this.getLevelType(this.gameState.currentLevel);
+
+    // Create player
+    this.player = createPlayer(
+      this.sceneSetup.scene,
+      this.gameState.playerSize,
+      this.levelRadius
+    );
+    this.player.visible = false; // Initially hidden, will be shown in enter()
+
+    // Create enemy manager
+    this.enemyManager = new EnemyManager(
+      this.sceneSetup.scene,
+      this.gameState,
+      this.levelRadius
+    );
+
+    // Create the blood moon
+    this.bloodMoon = new BloodMoon(this.sceneSetup.scene);
+  }
+
+  public getPlayer(): THREE.Group {
+    return this.player;
   }
 
   public enter(): void {
     // Show player and enable gameplay
-    if (this.player) {
-      this.player.visible = true;
-    }
+    this.player.visible = true;
 
     // Reset enemy spawn timer to start spawning enemies
     this.lastEnemyTime = this.clock.getElapsedTime();
@@ -111,10 +123,14 @@ export class ActiveMode implements GameMode {
   }
 
   public exit(): void {
-    // Nothing specific to clean up
+    // Hide player when exiting active mode
+    this.player.visible = false;
   }
 
   public shoot(): void {
+    // Don't shoot if in transition
+    if (this.transitionInProgress) return;
+    
     // Play shooting sound
     const audio = new Audio("laser-1.mp3");
     audio.play();
@@ -223,6 +239,8 @@ export class ActiveMode implements GameMode {
   }
 
   public toggleGhostMode(): void {
+    if (this.transitionInProgress) return;
+    
     this.gameState.ghostMode = !this.gameState.ghostMode;
 
     // Update the UI display to show ghost mode status

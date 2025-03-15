@@ -6,23 +6,13 @@ import { SceneSetup } from "../scene";
 export class MarqueeMode implements GameMode {
   private sceneSetup: SceneSetup;
   private gameState: GameState;
-  private player: THREE.Group;
 
-  constructor(sceneSetup: SceneSetup, gameState: GameState, player: THREE.Group) {
+  constructor(sceneSetup: SceneSetup, gameState: GameState) {
     this.sceneSetup = sceneSetup;
     this.gameState = gameState;
-    this.player = player;
-    
-    // Hide player in marquee mode
-    if (this.player) {
-      this.player.visible = false;
-    }
   }
 
   public enter(): void {
-    // Reset any necessary game elements
-    this.player.visible = false;
-    
     // Display marquee UI elements
     this.displayMarqueeScreen();
   }
@@ -41,6 +31,48 @@ export class MarqueeMode implements GameMode {
     if (marqueeElement) {
       document.body.removeChild(marqueeElement);
     }
+  }
+
+  // Input handling methods
+  public handleKeyDown(event: KeyboardEvent): void {
+    // In marquee mode, space or enter can start the game
+    if (event.key === " " || event.key === "Enter") {
+      this.startGame();
+    }
+  }
+
+  public handleKeyUp(event: KeyboardEvent): void {
+    // No specific key up handling needed for marquee mode
+  }
+
+  public handleMouseMove(event: MouseEvent): void {
+    // No mouse movement handling needed for marquee mode
+  }
+
+  public handleClick(event: MouseEvent): void {
+    // Clicking anywhere in marquee mode starts the game
+    // (unless clicking on a specific UI element that has its own handler)
+    if (!(event.target as Element).tagName.toLowerCase() === "button") {
+      this.startGame();
+    }
+  }
+
+  public handleTouchMove(event: TouchEvent): void {
+    // No touch movement handling needed for marquee mode
+  }
+
+  public handleTouchStart(event: TouchEvent): void {
+    // No specific touch start handling needed for marquee mode
+    // Start button has its own click handler
+  }
+
+  private startGame(): void {
+    // Transition to active game mode
+    document.dispatchEvent(
+      new CustomEvent("gameStatusChanged", {
+        detail: { status: "active" },
+      })
+    );
   }
 
   private displayMarqueeScreen(): void {
@@ -81,12 +113,7 @@ export class MarqueeMode implements GameMode {
     startButton.style.margin = "20px 0";
     
     startButton.addEventListener("click", () => {
-      // Dispatch event to change game status to active
-      document.dispatchEvent(
-        new CustomEvent("gameStatusChanged", {
-          detail: { status: "active" },
-        })
-      );
+      this.startGame();
     });
     
     marqueeContainer.appendChild(startButton);
@@ -100,6 +127,7 @@ export class MarqueeMode implements GameMode {
       <p>Use arrow keys or mouse to move</p>
       <p>Click or press space to shoot</p>
       <p>Press G to toggle ghost mode</p>
+      <p>Press SPACE or ENTER to start game</p>
     `;
     marqueeContainer.appendChild(instructionsElement);
 

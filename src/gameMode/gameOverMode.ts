@@ -6,12 +6,10 @@ import { SceneSetup } from "../scene";
 export class GameOverMode implements GameMode {
   private sceneSetup: SceneSetup;
   private gameState: GameState;
-  private player: THREE.Group;
 
-  constructor(sceneSetup: SceneSetup, gameState: GameState, player: THREE.Group) {
+  constructor(sceneSetup: SceneSetup, gameState: GameState) {
     this.sceneSetup = sceneSetup;
     this.gameState = gameState;
-    this.player = player;
   }
 
   public enter(): void {
@@ -39,6 +37,47 @@ export class GameOverMode implements GameMode {
     
     // Reset game state if transitioning back to marquee
     this.resetGameState();
+  }
+
+  // Input handling methods
+  public handleKeyDown(event: KeyboardEvent): void {
+    // Space, Enter, or R to retry
+    if (event.key === " " || event.key === "Enter" || event.key === "r" || event.key === "R") {
+      this.restartGame();
+    }
+  }
+
+  public handleKeyUp(event: KeyboardEvent): void {
+    // No key up handling needed
+  }
+
+  public handleMouseMove(event: MouseEvent): void {
+    // No mouse movement handling needed
+  }
+
+  public handleClick(event: MouseEvent): void {
+    // Clicking anywhere (except buttons) will restart
+    if (!(event.target as Element).tagName.toLowerCase() === "button") {
+      this.restartGame();
+    }
+  }
+
+  public handleTouchMove(event: TouchEvent): void {
+    // No touch movement handling needed
+  }
+
+  public handleTouchStart(event: TouchEvent): void {
+    // No touch start handling needed
+    // Retry button has its own click handler
+  }
+
+  private restartGame(): void {
+    // Transition back to marquee mode
+    document.dispatchEvent(
+      new CustomEvent("gameStatusChanged", {
+        detail: { status: "marquee" },
+      })
+    );
   }
 
   private showGameOver(): void {
@@ -98,14 +137,20 @@ export class GameOverMode implements GameMode {
     
     // Add event listener for the retry button
     retryButton.addEventListener("click", () => {
-      document.dispatchEvent(
-        new CustomEvent("gameStatusChanged", {
-          detail: { status: "marquee" },
-        })
-      );
+      this.restartGame();
     });
     
     gameOverContainer.appendChild(retryButton);
+
+    // Instructions
+    const instructionsElement = document.createElement("div");
+    instructionsElement.style.fontSize = "18px";
+    instructionsElement.style.maxWidth = "600px";
+    instructionsElement.style.margin = "20px 0";
+    instructionsElement.innerHTML = `
+      <p>Press SPACE, ENTER or R to play again</p>
+    `;
+    gameOverContainer.appendChild(instructionsElement);
 
     document.body.appendChild(gameOverContainer);
   }
