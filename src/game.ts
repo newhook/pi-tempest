@@ -67,6 +67,11 @@ export class Game {
 
     // Handle window resize
     this.setupResizeHandler();
+
+    // Set up user interaction to start background soundtrack
+    document.addEventListener("click", this.startBackgroundSoundtrack, {
+      once: true,
+    });
   }
 
   private getLevelType(levelNumber: number): string {
@@ -221,6 +226,14 @@ export class Game {
     });
   }
 
+  private startBackgroundSoundtrack = (): void => {
+    const audio = new Audio("soundtrack-1.mp3");
+    audio.volume = 1;
+    console.log(audio);
+    audio.loop = true;
+    audio.play();
+  };
+
   public start(): void {
     // Start the game loop
     this.gameLoop();
@@ -328,6 +341,12 @@ export class Game {
     if (this.gameState.isGameOver) {
       return; // Stop animation loop if game is over
     }
+
+    // Play background soundtrack
+    // const audio = new Audio("soundtrack-1.mp3");
+    // console.log(audio);
+    // audio.loop = true;
+    // audio.play();
 
     // Request next frame
     requestAnimationFrame(this.gameLoop);
