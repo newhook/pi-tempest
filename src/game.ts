@@ -216,7 +216,6 @@ export class Game {
   // Add method to toggle ghost mode
   private toggleGhostMode(): void {
     this.gameState.ghostMode = !this.gameState.ghostMode;
-    console.log("toggleGhostMode", this.gameState.ghostMode);
 
     // Update the UI display to show ghost mode status
     updateGhostModeDisplay(this.gameState.ghostMode);
@@ -230,8 +229,6 @@ export class Game {
           object.material.transparent = true;
         }
       });
-
-      console.log("Ghost mode activated!");
     } else {
       // Restore player opacity when ghost mode is deactivated
       this.player.traverse((object) => {
@@ -239,12 +236,7 @@ export class Game {
           object.material.opacity = 1.0;
           object.material.transparent = false;
         }
-        if (object instanceof THREE.Mesh) {
-          object.material.opacity = 1.0;
-          object.material.transparent = false;
-        }
       });
-      console.log("Ghost mode deactivated!");
     }
   }
 

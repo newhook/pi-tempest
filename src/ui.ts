@@ -147,7 +147,6 @@ export function showGameOver(gameState: GameState): void {
 
 // Toggle ghost mode display
 export function updateGhostModeDisplay(isActive: boolean): void {
-  console.log("updateGhostModeDisplay", isActive);
   // Check if the element exists, create it if it doesn't
   let ghostModeElement = document.getElementById("ghost-mode-display");
 
