@@ -101,6 +101,12 @@ function showTitle(): void {
     const container = document.getElementById('title-container');
     if (container) {
       container.style.display = 'none';
+      
+      // Fade out blood moon when game starts
+      const sceneSetup = (window as any).sceneSetup;
+      if (sceneSetup && sceneSetup.fadeOutBloodMoon) {
+        sceneSetup.fadeOutBloodMoon();
+      }
     }
   }, { once: true });
 }

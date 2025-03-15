@@ -39,6 +39,9 @@ export class Game {
     // Set up scene and add renderer to DOM
     this.sceneSetup = setupScene();
     document.body.appendChild(this.sceneSetup.renderer.domElement);
+    
+    // Store sceneSetup on window for access from UI component
+    (window as any).sceneSetup = this.sceneSetup;
 
     // Create level and determine its type
     this.level = createLevel(
