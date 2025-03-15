@@ -25,6 +25,16 @@ export class ActiveMode implements GameMode {
     right: false,
   };
   private keyMovementInterval: number | null = null;
+  
+  // Active mode specific state
+  private modeState: ActiveModeState = {
+    playerSize: 0.5,
+    playerAngle: 0,
+    enemySpeed: 0.03,
+    enemies: [],
+    bullets: [],
+    ghostMode: false
+  };
 
   constructor(sceneSetup: SceneSetup, gameState: GameState, clock: THREE.Clock) {
     this.sceneSetup = sceneSetup;
@@ -42,7 +52,7 @@ export class ActiveMode implements GameMode {
     // Create player
     this.player = createPlayer(
       this.sceneSetup.scene,
-      this.gameState.playerSize,
+      this.modeState.playerSize,
       this.levelRadius
     );
     this.player.visible = false; // Initially hidden, will be shown in enter()
@@ -51,6 +61,7 @@ export class ActiveMode implements GameMode {
     this.enemyManager = new EnemyManager(
       this.sceneSetup.scene,
       this.gameState,
+      this.modeState,
       this.levelRadius
     );
 
@@ -82,17 +93,15 @@ export class ActiveMode implements GameMode {
   private setupKeyMovement(): void {
     // Update player angle based on keys in animation loop
     this.keyMovementInterval = window.setInterval(() => {
-      if (!this.gameState.isGameOver) {
-        const moveSpeed = 0.1;
+      const moveSpeed = 0.1;
 
-        if (this.keys.left) {
-          this.gameState.playerAngle -= moveSpeed;
-          this.normalizePlayerAngle();
-        }
-        if (this.keys.right) {
-          this.gameState.playerAngle += moveSpeed;
-          this.normalizePlayerAngle();
-        }
+      if (this.keys.left) {
+        this.modeState.playerAngle -= moveSpeed;
+        this.normalizePlayerAngle();
+      }
+      if (this.keys.right) {
+        this.modeState.playerAngle += moveSpeed;
+        this.normalizePlayerAngle();
       }
     }, 16); // ~60fps
   }
@@ -117,7 +126,7 @@ export class ActiveMode implements GameMode {
 
     // Check for player-enemy collisions (only if ghost mode is not active and not during transition)
     if (
-      !this.gameState.ghostMode &&
+      !this.modeState.ghostMode &&
       !this.transitionInProgress &&
       this.enemyManager.checkPlayerCollision(this.player)
     ) {
@@ -134,7 +143,7 @@ export class ActiveMode implements GameMode {
 
     // Update player position based on current angle and level type
     const playerPosition = this.getPositionOnLevelOutline(
-      this.gameState.playerAngle
+      this.modeState.playerAngle
     );
     this.player.position.set(playerPosition.x, playerPosition.y, 0);
 
@@ -156,10 +165,10 @@ export class ActiveMode implements GameMode {
     this.destroyAllEnemies();
     
     // Remove all bullets
-    for (const bullet of this.gameState.bullets) {
+    for (const bullet of this.modeState.bullets) {
       this.sceneSetup.scene.remove(bullet.mesh);
     }
-    this.gameState.bullets = [];
+    this.modeState.bullets = [];
     
     // Remove level
     this.sceneSetup.scene.remove(this.level);
@@ -188,7 +197,7 @@ export class ActiveMode implements GameMode {
     const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
 
     // Position the bullet at the player's position
-    const playerAngle = this.gameState.playerAngle;
+    const playerAngle = this.modeState.playerAngle;
     const bulletSpeed = 0.3;
 
     // Get player position on level outline
@@ -203,7 +212,7 @@ export class ActiveMode implements GameMode {
     const directionY = -Math.sin(playerAngle);
 
     this.sceneSetup.scene.add(bullet);
-    this.gameState.bullets.push({
+    this.modeState.bullets.push({
       mesh: bullet,
       direction: new THREE.Vector2(directionX, directionY),
       speed: bulletSpeed,
@@ -244,7 +253,7 @@ export class ActiveMode implements GameMode {
 
     // Reset player position to level outline
     const playerPosition = this.getPositionOnLevelOutline(
-      this.gameState.playerAngle
+      this.modeState.playerAngle
     );
     this.player.position.set(playerPosition.x, playerPosition.y, 0);
     this.player.lookAt(0, 0, 0);
@@ -256,7 +265,7 @@ export class ActiveMode implements GameMode {
     this.bloodMoon.fadeOut();
 
     // Give a brief period of invulnerability after level change
-    this.gameState.ghostMode = true;
+    this.modeState.ghostMode = true;
     this.updateGhostModeDisplay(true);
 
     // Make the player semi-transparent to indicate invulnerability
@@ -272,7 +281,7 @@ export class ActiveMode implements GameMode {
 
     // End invulnerability after a brief period
     setTimeout(() => {
-      this.gameState.ghostMode = false;
+      this.modeState.ghostMode = false;
       this.updateGhostModeDisplay(false);
 
       // Restore player opacity
@@ -288,13 +297,13 @@ export class ActiveMode implements GameMode {
   public toggleGhostMode(): void {
     if (this.transitionInProgress) return;
     
-    this.gameState.ghostMode = !this.gameState.ghostMode;
+    this.modeState.ghostMode = !this.modeState.ghostMode;
 
     // Update the UI display to show ghost mode status
-    this.updateGhostModeDisplay(this.gameState.ghostMode);
+    this.updateGhostModeDisplay(this.modeState.ghostMode);
 
     // Visual feedback for ghost mode
-    if (this.gameState.ghostMode) {
+    if (this.modeState.ghostMode) {
       // Make player semi-transparent when ghost mode is active
       this.player.traverse((object) => {
         if (object instanceof THREE.Mesh) {
@@ -420,8 +429,8 @@ export class ActiveMode implements GameMode {
   }
 
   private updateBullets(delta: number): void {
-    for (let i = this.gameState.bullets.length - 1; i >= 0; i--) {
-      const bullet = this.gameState.bullets[i];
+    for (let i = this.modeState.bullets.length - 1; i >= 0; i--) {
+      const bullet = this.modeState.bullets[i];
 
       // Move bullet
       bullet.mesh.position.x += bullet.direction.x * bullet.speed;
@@ -435,19 +444,19 @@ export class ActiveMode implements GameMode {
 
       if (distanceFromCenter < 1 || distanceFromCenter > this.levelRadius + 5) {
         this.sceneSetup.scene.remove(bullet.mesh);
-        this.gameState.bullets.splice(i, 1);
+        this.modeState.bullets.splice(i, 1);
       }
     }
   }
 
   private checkBulletCollisions(): void {
     // Check each bullet against each enemy
-    for (let i = this.gameState.bullets.length - 1; i >= 0; i--) {
-      const bullet = this.gameState.bullets[i];
+    for (let i = this.modeState.bullets.length - 1; i >= 0; i--) {
+      const bullet = this.modeState.bullets[i];
       let hitDetected = false;
 
-      for (let j = this.gameState.enemies.length - 1; j >= 0; j--) {
-        const enemy = this.gameState.enemies[j];
+      for (let j = this.modeState.enemies.length - 1; j >= 0; j--) {
+        const enemy = this.modeState.enemies[j];
 
         // Simple distance-based collision detection
         const dx = bullet.mesh.position.x - enemy.mesh.position.x;
@@ -462,7 +471,7 @@ export class ActiveMode implements GameMode {
 
           // Remove the enemy after explosion triggered
           this.sceneSetup.scene.remove(enemy.mesh);
-          this.gameState.enemies.splice(j, 1);
+          this.modeState.enemies.splice(j, 1);
 
           // Calculate score based on enemy type (pi-based)
           const piMultiplier = 3.14 * this.gameState.currentLevel;
@@ -473,12 +482,12 @@ export class ActiveMode implements GameMode {
 
           // Remove the bullet
           this.sceneSetup.scene.remove(bullet.mesh);
-          this.gameState.bullets.splice(i, 1);
+          this.modeState.bullets.splice(i, 1);
           hitDetected = true;
 
           // Increase difficulty every 100 points
           if (this.gameState.score % 100 === 0) {
-            this.gameState.enemySpeed += 0.005;
+            this.modeState.enemySpeed += 0.005;
           }
 
           // Level up every 314 points
@@ -520,11 +529,11 @@ export class ActiveMode implements GameMode {
 
   private destroyAllEnemies(): void {
     // Remove all enemies
-    for (const enemy of this.gameState.enemies) {
+    for (const enemy of this.modeState.enemies) {
       enemy.explode(); // Trigger explosion effect
       this.sceneSetup.scene.remove(enemy.mesh);
     }
-    this.gameState.enemies = [];
+    this.modeState.enemies = [];
   }
 
   private async flyPlayerToBloodMoon(): Promise<void> {
@@ -582,16 +591,16 @@ export class ActiveMode implements GameMode {
   
   private updatePlayerAngle(targetAngle: number): void {
     // Set player angle directly
-    this.gameState.playerAngle = targetAngle;
+    this.modeState.playerAngle = targetAngle;
     this.normalizePlayerAngle();
   }
 
   private normalizePlayerAngle(): void {
     // Normalize angle to be between 0 and 2π for calculations
-    while (this.gameState.playerAngle < 0)
-      this.gameState.playerAngle += Math.PI * 2;
-    while (this.gameState.playerAngle >= Math.PI * 2)
-      this.gameState.playerAngle -= Math.PI * 2;
+    while (this.modeState.playerAngle < 0)
+      this.modeState.playerAngle += Math.PI * 2;
+    while (this.modeState.playerAngle >= Math.PI * 2)
+      this.modeState.playerAngle -= Math.PI * 2;
   }
   
   public handleKeyDown(event: KeyboardEvent): void {

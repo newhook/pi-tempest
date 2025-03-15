@@ -4,17 +4,22 @@ import { Enemy } from "./enemy";
 // Define possible game status values
 export type GameStatus = "marquee" | "active" | "gameOver";
 
+// Core game state shared across all modes
 export interface GameState {
+  // Shared state
   score: number;
+  gameStatus: GameStatus;
+  currentLevel: number;
+}
+
+// Active mode specific state
+export interface ActiveModeState {
   playerSize: number;
   playerAngle: number;
   enemySpeed: number;
   enemies: Enemy[];
   bullets: Bullet[];
-  currentLevel: number;
-  isGameOver: boolean;
   ghostMode: boolean;
-  gameStatus: GameStatus;
 }
 
 export interface Bullet {

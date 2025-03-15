@@ -19,17 +19,10 @@ export class Game {
   private activeMode: ActiveMode | null = null;
 
   constructor() {
-    // Initialize game state
+    // Initialize game state with only shared properties
     this.gameState = {
       score: 0,
-      playerSize: 0.5,
-      playerAngle: 0,
-      enemySpeed: 0.03,
-      enemies: [],
-      bullets: [],
       currentLevel: 1,
-      isGameOver: false,
-      ghostMode: false,
       gameStatus: "marquee",
     };
 

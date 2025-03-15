@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GameState } from "./types";
+import { GameState, ActiveModeState } from "./types";
 
 // Class representing an individual enemy
 export class Enemy {
@@ -17,6 +17,7 @@ export class Enemy {
   public spokeCrossingDirection?: number;
   public spokeCrossingSpeed?: number;
   private gameState: GameState;
+  private modeState: ActiveModeState;
   private scene: THREE.Scene;
   // Number of spokes in the current level (needed for spoke movement)
   private numSpokes: number = 8;
@@ -39,6 +40,7 @@ export class Enemy {
     movementStyle: string,
     scene: THREE.Scene,
     gameState: GameState,
+    modeState: ActiveModeState,
     direction?: THREE.Vector2
   ) {
     this.mesh = mesh;
@@ -51,6 +53,7 @@ export class Enemy {
     this.movementStyle = movementStyle;
     this.scene = scene;
     this.gameState = gameState;
+    this.modeState = modeState;
     this.direction = direction;
   }
 
@@ -490,23 +493,24 @@ export class Enemy {
         Math.sin(angle)
       );
 
-      // Create the enemy with a reference to scene and gameState
+      // Create the enemy with a reference to scene, gameState, and modeState
       const enemy = new Enemy(
         mesh,
         Math.atan2(randomDirection.y, randomDirection.x),
         Math.sqrt(position.x * position.x + position.y * position.y),
-        this.gameState.enemySpeed * 1.5, // Slightly faster than original
+        this.modeState.enemySpeed * 1.5, // Slightly faster than original
         -1, // Special type for smaller spheres
         0.2,
         1,
         "linear",
         this.scene,
         this.gameState,
+        this.modeState,
         randomDirection
       );
 
       this.scene.add(mesh);
-      this.gameState.enemies.push(enemy);
+      this.modeState.enemies.push(enemy);
     }
   }
 }

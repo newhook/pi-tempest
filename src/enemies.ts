@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GameState } from "./types";
+import { GameState, ActiveModeState } from "./types";
 import { Enemy } from "./enemy";
 
 // Pi digits to use for enemy generation
@@ -8,13 +8,15 @@ const PI_DIGITS = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9];
 export class EnemyManager {
   private scene: THREE.Scene;
   private gameState: GameState;
+  private modeState: ActiveModeState;
   private levelRadius: number;
   private piIndex: number = 0;
   private numSpokes: number = 8; // Number of spokes in the wheel
 
-  constructor(scene: THREE.Scene, gameState: GameState, levelRadius: number) {
+  constructor(scene: THREE.Scene, gameState: GameState, modeState: ActiveModeState, levelRadius: number) {
     this.scene = scene;
     this.gameState = gameState;
+    this.modeState = modeState;
     this.levelRadius = levelRadius;
 
     // Set number of spokes based on level
@@ -104,13 +106,14 @@ export class EnemyManager {
       mesh,
       angle,
       0, // distanceFromCenter starts at 0
-      this.gameState.enemySpeed * speedMultiplier,
+      this.modeState.enemySpeed * speedMultiplier,
       piDigit,
       size,
       hitPoints,
       movementStyle,
       this.scene,
-      this.gameState
+      this.gameState,
+      this.modeState
     );
 
     // Store spoke information for enemies on spokes
@@ -132,7 +135,7 @@ export class EnemyManager {
     }
 
     this.scene.add(mesh);
-    this.gameState.enemies.push(enemy);
+    this.modeState.enemies.push(enemy);
   }
 
   // Get the level type based on level number
@@ -158,7 +161,7 @@ export class EnemyManager {
     this.updateSpokeCount();
 
     // Move all enemies based on their movement style
-    for (const enemy of this.gameState.enemies) {
+    for (const enemy of this.modeState.enemies) {
       // Use the unified update method for all enemy types
       enemy.update(delta, this.levelRadius, this.numSpokes);
     }
@@ -169,31 +172,29 @@ export class EnemyManager {
 
   removeOffscreenEnemies(): void {
     // Remove enemies that are past the level boundary
-    for (let i = this.gameState.enemies.length - 1; i >= 0; i--) {
-      const enemy = this.gameState.enemies[i];
+    for (let i = this.modeState.enemies.length - 1; i >= 0; i--) {
+      const enemy = this.modeState.enemies[i];
 
       if (enemy.isOffscreen(this.levelRadius)) {
         this.scene.remove(enemy.mesh);
-        this.gameState.enemies.splice(i, 1);
+        this.modeState.enemies.splice(i, 1);
 
         // Penalty for missing an enemy
-        if (!this.gameState.isGameOver) {
-          // Subtract points based on enemy type
-          const penalty = Math.floor(enemy.type * 1.5);
-          this.gameState.score = Math.max(0, this.gameState.score - penalty);
-        }
+        // Subtract points based on enemy type
+        const penalty = Math.floor(enemy.type * 1.5);
+        this.gameState.score = Math.max(0, this.gameState.score - penalty);
       }
     }
   }
 
   checkPlayerCollision(player: THREE.Group): boolean {
     // Player collision radius (slightly smaller than visual size)
-    const playerRadius = this.gameState.playerSize * 0.8;
+    const playerRadius = this.modeState.playerSize * 0.8;
 
     // Get player position
     const playerPos = player.position;
 
-    for (const enemy of this.gameState.enemies) {
+    for (const enemy of this.modeState.enemies) {
       if (enemy.checkCollision(playerPos, playerRadius)) {
         return true; // Collision detected
       }
