@@ -4,9 +4,8 @@
   "description": "A Three.js game with TypeScript",
   "main": "src/main.ts",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --outfile=public/bundle.js",
-    "dev": "esbuild src/main.ts --bundle --outfile=public/bundle.js --watch",
-    "serve": "esbuild src/main.ts --bundle --outfile=public/bundle.js --watch & npx serve public",
+    "build": "vite build",
+    "dev": "vite",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
@@ -21,8 +20,7 @@
   },
   "devDependencies": {
     "@types/three": "^0.162.0",
-    "esbuild": "^0.20.1",
-    "serve": "^14.2.4",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vite": "^6.2.2"
   }
 }
