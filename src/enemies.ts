@@ -2,15 +2,11 @@ import * as THREE from "three";
 import { GameState, ActiveModeState } from "./types";
 import { Enemy } from "./enemy";
 
-// Pi digits to use for enemy generation
-const PI_DIGITS = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9];
-
 export class EnemyManager {
   private scene: THREE.Scene;
   private gameState: GameState;
   private modeState: ActiveModeState;
   private levelRadius: number;
-  private piIndex: number = 0;
   private numSpokes: number = 8; // Number of spokes in the wheel
 
   constructor(scene: THREE.Scene, gameState: GameState, modeState: ActiveModeState, levelRadius: number) {
@@ -32,15 +28,25 @@ export class EnemyManager {
   }
 
   createEnemy(): void {
-    // Get next PI digit as enemy type
-    const piDigit = PI_DIGITS[this.piIndex % PI_DIGITS.length];
-    this.piIndex++;
+    // Determine the available enemy types based on level
+    // Level 1: types 0, 1
+    // Level 2: types 0, 1, 2, 3
+    // Level 3: types 0, 1, 2, 3, 4, 5
+    // Level 4: types 0, 1, 2, 3, 4, 5, 6, 7
+    // Level 5+: all types (0-9)
+    const maxEnemyType = Math.min(
+      9, // Maximum enemy type is 9
+      Math.ceil(this.gameState.currentLevel * 2 - 1) // 2 new types per level
+    );
+    
+    // Select a random enemy type from the available range
+    const enemyType = Math.floor(Math.random() * (maxEnemyType + 1));
+    
+    // Create enemy geometry based on the enemy type
+    const enemyGeometry = Enemy.getGeometry(enemyType);
 
-    // Create enemy geometry based on pi digit
-    const enemyGeometry = Enemy.getGeometry(piDigit);
-
-    // Color based on digit value (range of blues and purples)
-    const hue = 0.6 + piDigit / 30; // blues to purples
+    // Color based on enemy type (range of blues and purples)
+    const hue = 0.6 + enemyType / 30; // blues to purples
     const color = new THREE.Color().setHSL(hue, 1, 0.5);
 
     // Create material with emissive glow
@@ -95,11 +101,11 @@ export class EnemyManager {
       movementStyle = willCross ? "spokeCrossing" : "spoke";
     }
 
-    // Assign hitpoints and speed based on piDigit
-    const { hitPoints, speedMultiplier } = Enemy.getBehavior(piDigit);
+    // Assign hitpoints and speed based on enemy type
+    const { hitPoints, speedMultiplier } = Enemy.getBehavior(enemyType);
 
     // Randomize size slightly
-    const size = 0.3 + piDigit / 20 + Math.random() * 0.1;
+    const size = 0.3 + enemyType / 20 + Math.random() * 0.1;
 
     // Create the enemy object
     const enemy = new Enemy(
@@ -107,7 +113,7 @@ export class EnemyManager {
       angle,
       0, // distanceFromCenter starts at 0
       this.modeState.enemySpeed * speedMultiplier,
-      piDigit,
+      enemyType,
       size,
       hitPoints,
       movementStyle,

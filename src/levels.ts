@@ -16,10 +16,10 @@ export function createLevel(levelNumber: number, radius: number): THREE.Group {
       createStarLevel(levelGroup, radius, 3 + (levelNumber % 5));
       break;
     case 3:
-      createPiSymbolLevel(levelGroup, radius);
+      createWaveLevel(levelGroup, radius);
       break;
     case 4:
-      createWaveLevel(levelGroup, radius);
+      createPiSymbolLevel(levelGroup, radius);
       break;
   }
 

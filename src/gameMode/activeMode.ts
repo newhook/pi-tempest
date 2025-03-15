@@ -15,7 +15,7 @@ export class ActiveMode implements GameMode {
   private enemyManager: EnemyManager;
   private clock: THREE.Clock;
   private lastEnemyTime: number = 0;
-  private level: THREE.Group;
+  private level!: THREE.Group;
   private levelRadius: number = 10;
   private currentLevelType: string = "circle";
   private bloodMoon: BloodMoon;
@@ -45,10 +45,9 @@ export class ActiveMode implements GameMode {
     this.gameState = gameState;
     this.clock = clock;
 
-    this.level = createLevel(this.gameState.currentLevel, this.levelRadius);
-
     this.player = createPlayer(this.modeState.playerSize, this.levelRadius);
 
+    // Create the blood moon but don't add it to the scene yet
     this.bloodMoon = new BloodMoon(this.sceneSetup.scene);
 
     this.enemyManager = new EnemyManager(
@@ -64,6 +63,7 @@ export class ActiveMode implements GameMode {
   }
 
   public enter(): void {
+    this.level = createLevel(this.gameState.currentLevel, this.levelRadius);
     this.sceneSetup.scene.add(this.level);
 
     // Ensure player is in the scene
@@ -244,6 +244,7 @@ export class ActiveMode implements GameMode {
     this.destroyAllEnemies();
 
     // Move the blood moon to the center and expand it to fill the level
+    this.bloodMoon.enter();
     this.bloodMoon.moveToCenter(this.levelRadius);
 
     // Wait for the blood moon to expand
@@ -262,11 +263,8 @@ export class ActiveMode implements GameMode {
     this.sceneSetup.scene.remove(this.level);
 
     // Create new level
-    this.level = createLevel(
-      this.sceneSetup.scene,
-      this.gameState.currentLevel,
-      this.levelRadius
-    );
+    this.level = createLevel(this.gameState.currentLevel, this.levelRadius);
+    this.sceneSetup.scene.add(this.level);
 
     // Update the current level type
     this.currentLevelType = this.getLevelType(this.gameState.currentLevel);
@@ -375,9 +373,9 @@ export class ActiveMode implements GameMode {
       case 2:
         return "star";
       case 3:
-        return "pi";
-      case 4:
         return "wave";
+      case 4:
+        return "pi";
       default:
         return "circle";
     }
@@ -626,26 +624,24 @@ export class ActiveMode implements GameMode {
   }
 
   public handleKeyDown(event: KeyboardEvent): void {
-    if (!this.gameState.isGameOver) {
-      switch (event.key) {
-        case "ArrowLeft":
-        case "a":
-          this.keys.left = true;
-          break;
-        case "ArrowRight":
-        case "d":
-          this.keys.right = true;
-          break;
-        case " ":
-          this.shoot();
-          break;
-        case "l": // Add "l" key to force level transition
-          this.levelUp();
-          break;
-        case "g": // Add "g" key to toggle ghost mode
-          this.toggleGhostMode();
-          break;
-      }
+    switch (event.key) {
+      case "ArrowLeft":
+      case "a":
+        this.keys.left = true;
+        break;
+      case "ArrowRight":
+      case "d":
+        this.keys.right = true;
+        break;
+      case " ":
+        this.shoot();
+        break;
+      case "l": // Add "l" key to force level transition
+        this.levelUp();
+        break;
+      case "g": // Add "g" key to toggle ghost mode
+        this.toggleGhostMode();
+        break;
     }
   }
 
@@ -663,30 +659,26 @@ export class ActiveMode implements GameMode {
   }
 
   public handleMouseMove(event: MouseEvent): void {
-    if (!this.gameState.isGameOver) {
-      const centerX = window.innerWidth / 2;
-      const centerY = window.innerHeight / 2;
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
 
-      const mouseX = event.clientX - centerX;
-      // Invert Y coordinate to fix the vertical inversion issue
-      const mouseY = -(event.clientY - centerY);
+    const mouseX = event.clientX - centerX;
+    // Invert Y coordinate to fix the vertical inversion issue
+    const mouseY = -(event.clientY - centerY);
 
-      // Calculate angle to mouse position
-      const mouseAngle = Math.atan2(mouseY, mouseX);
+    // Calculate angle to mouse position
+    const mouseAngle = Math.atan2(mouseY, mouseX);
 
-      // Update player angle
-      this.updatePlayerAngle(mouseAngle);
-    }
+    // Update player angle
+    this.updatePlayerAngle(mouseAngle);
   }
 
   public handleClick(event: MouseEvent): void {
-    if (!this.gameState.isGameOver) {
-      this.shoot();
-    }
+    this.shoot();
   }
 
   public handleTouchMove(event: TouchEvent): void {
-    if (!this.gameState.isGameOver && event.touches.length > 0) {
+    if (event.touches.length > 0) {
       const touch = event.touches[0];
 
       const centerX = window.innerWidth / 2;
@@ -707,8 +699,6 @@ export class ActiveMode implements GameMode {
   }
 
   public handleTouchStart(event: TouchEvent): void {
-    if (!this.gameState.isGameOver) {
-      this.shoot();
-    }
+    this.shoot();
   }
 }
