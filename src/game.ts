@@ -227,6 +227,10 @@ export class Game {
   }
 
   private shoot(): void {
+    // Play shooting sound
+    const audio = new Audio("laser-1.mp3");
+    audio.play();
+
     // Create a bullet
     const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
     const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0x00ffff });
@@ -467,7 +471,6 @@ export class Game {
     }, 1000);
   }
 
-  // ...existing code...
   private checkBulletCollisions(): void {
     // Check each bullet against each enemy
     for (let i = this.gameState.bullets.length - 1; i >= 0; i--) {
@@ -486,6 +489,10 @@ export class Game {
           // Collision detected
           this.sceneSetup.scene.remove(enemy.mesh);
           this.gameState.enemies.splice(j, 1);
+
+          // Play explosion sound
+          const audio = new Audio("explosion-1.mp3");
+          audio.play();
 
           // Create explosion effect with enemy color
           const enemyMaterial = enemy.mesh.material as THREE.MeshBasicMaterial;
