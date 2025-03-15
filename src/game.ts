@@ -20,6 +20,8 @@ export class Game {
   private lastEnemyTime: number = 0;
   private clock: THREE.Clock;
 
+  private transitionInProgress: boolean = false;
+
   constructor() {
     // Initialize game state
     this.gameState = {
@@ -200,7 +202,7 @@ export class Game {
 
     // Update player angle based on keys in animation loop
     setInterval(() => {
-      if (!this.gameState.isGameOver) {
+      if (!this.gameState.isGameOver && !this.transitionInProgress) {
         const moveSpeed = 0.1;
 
         if (keys.left) {
@@ -385,7 +387,7 @@ export class Game {
     const elapsedTime = this.clock.getElapsedTime();
 
     // Create new enemies periodically
-    if (elapsedTime - this.lastEnemyTime > 1.5) {
+    if (elapsedTime - this.lastEnemyTime > 1.5 && !this.transitionInProgress) {
       this.enemyManager.createEnemy();
       this.lastEnemyTime = elapsedTime;
     }
@@ -399,9 +401,10 @@ export class Game {
     // Check for enemy-bullet collisions
     this.checkBulletCollisions();
 
-    // Check for player-enemy collisions (only if ghost mode is not active)
+    // Check for player-enemy collisions (only if ghost mode is not active and not during transition)
     if (
       !this.gameState.ghostMode &&
+      !this.transitionInProgress &&
       this.enemyManager.checkPlayerCollision(this.player)
     ) {
       this.gameOver();
@@ -502,7 +505,22 @@ export class Game {
     }
   }
 
-  private levelUp(): void {
+  private async levelUp(): Promise<void> {
+    if (this.transitionInProgress) return;
+    this.transitionInProgress = true;
+
+    // Show level completed text
+    this.showLevelCompletedText();
+
+    // Wait a moment for user to read the text
+    await this.delay(1500);
+
+    // Destroy all enemies
+    this.destroyAllEnemies();
+
+    // Fly the player ship to the blood moon
+    await this.flyPlayerToBloodMoon();
+
     // Increment level
     this.gameState.currentLevel++;
 
@@ -518,6 +536,131 @@ export class Game {
 
     // Update the current level type
     this.currentLevelType = this.getLevelType(this.gameState.currentLevel);
+
+    // Reset player position to level outline
+    const playerPosition = this.getPositionOnLevelOutline(
+      this.gameState.playerAngle
+    );
+    this.player.position.set(playerPosition.x, playerPosition.y, 0);
+    this.player.lookAt(0, 0, 0);
+
+    // Add a brief delay before ending the transition
+    await this.delay(500);
+
+    // Give a brief period of invulnerability after level change
+    this.gameState.ghostMode = true;
+    updateGhostModeDisplay(true);
+
+    // Make the player semi-transparent to indicate invulnerability
+    this.player.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        object.material.opacity = 0.5;
+        object.material.transparent = true;
+      }
+    });
+
+    // Resume normal gameplay
+    this.transitionInProgress = false;
+
+    // End invulnerability after a brief period
+    setTimeout(() => {
+      this.gameState.ghostMode = false;
+      updateGhostModeDisplay(false);
+
+      // Restore player opacity
+      this.player.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.material.opacity = 1.0;
+          object.material.transparent = false;
+        }
+      });
+    }, 2000);
+  }
+
+  private showLevelCompletedText(): void {
+    const levelCompleted = document.createElement("div");
+    levelCompleted.textContent = "LEVEL COMPLETED";
+    levelCompleted.style.position = "absolute";
+    levelCompleted.style.top = "10%";
+    levelCompleted.style.left = "50%";
+    levelCompleted.style.transform = "translateX(-50%)";
+    levelCompleted.style.color = "#FF0000";
+    levelCompleted.style.fontFamily = "Arial, sans-serif";
+    levelCompleted.style.fontSize = "36px";
+    levelCompleted.style.fontWeight = "bold";
+    levelCompleted.id = "level-completed-text";
+
+    document.body.appendChild(levelCompleted);
+
+    // Remove the text after the transition
+    setTimeout(() => {
+      const textElement = document.getElementById("level-completed-text");
+      if (textElement) {
+        document.body.removeChild(textElement);
+      }
+    }, 3000);
+  }
+
+  private destroyAllEnemies(): void {
+    // Remove all enemies
+    for (const enemy of this.gameState.enemies) {
+      enemy.explode(); // Trigger explosion effect
+      this.sceneSetup.scene.remove(enemy.mesh);
+    }
+    this.gameState.enemies = [];
+  }
+
+  private async flyPlayerToBloodMoon(): Promise<void> {
+    const duration = 1500; // 1.5 seconds
+    const startPosition = {
+      x: this.player.position.x,
+      y: this.player.position.y,
+      z: this.player.position.z,
+    };
+
+    return new Promise<void>((resolve) => {
+      const startTime = Date.now();
+
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Easing function for smooth animation
+        const easeProgress =
+          progress < 0.5
+            ? 2 * progress * progress
+            : -1 + (4 - 2 * progress) * progress;
+
+        // Move player toward blood moon (center)
+        this.player.position.x = startPosition.x * (1 - easeProgress);
+        this.player.position.y = startPosition.y * (1 - easeProgress);
+        this.player.position.z = startPosition.z + easeProgress * 2; // Move slightly forward
+
+        // Shrink player as it approaches "distance"
+        const scale = 1 - easeProgress * 0.5;
+        this.player.scale.set(scale, scale, scale);
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          // Reset player scale
+          this.player.scale.set(1, 1, 1);
+          resolve();
+        }
+
+        // Render during animation
+        this.sceneSetup.renderer.render(
+          this.sceneSetup.scene,
+          this.sceneSetup.camera
+        );
+      };
+
+      animate();
+    });
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private gameOver(): void {

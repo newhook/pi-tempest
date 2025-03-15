@@ -10,6 +10,7 @@ export interface GameState {
   bullets: Bullet[];
   currentLevel: number;
   isGameOver: boolean;
+  ghostMode: boolean; // Add ghost mode property
 }
 
 export interface Bullet {

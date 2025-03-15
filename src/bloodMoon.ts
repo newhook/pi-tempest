@@ -35,7 +35,7 @@ export function createBloodMoon(scene: THREE.Scene): () => void {
   // Create surface details (craters)
   const detailCount = 8;
   const craters: THREE.Mesh[] = [];
-  
+
   for (let i = 0; i < detailCount; i++) {
     // Random position within the moon
     const angle = Math.random() * Math.PI * 2;
@@ -53,7 +53,7 @@ export function createBloodMoon(scene: THREE.Scene): () => void {
     });
     const crater = new THREE.Mesh(craterGeometry, craterMaterial);
     crater.position.set(x, y, moonPosition.z + 0.1);
-    
+
     craters.push(crater);
     moonGroup.add(crater);
   }
@@ -64,12 +64,12 @@ export function createBloodMoon(scene: THREE.Scene): () => void {
 
   // Add the whole group to the scene
   scene.add(moonGroup);
-  
+
   // Fade-out state
   let isFadingOut = false;
   let fadeStart = 0;
   const fadeDuration = 2000; // 2 seconds fade-out
-  
+
   // Function to fade out the blood moon
   const fadeOut = () => {
     if (!isFadingOut) {
@@ -81,20 +81,20 @@ export function createBloodMoon(scene: THREE.Scene): () => void {
   // Animate the blood moon with a subtle pulsing effect
   function animateMoon() {
     const time = Date.now() * 0.001;
-    
+
     if (isFadingOut) {
       // Calculate fade progress
       const fadeProgress = Math.min(1, (Date.now() - fadeStart) / fadeDuration);
       const opacity = 1 - fadeProgress;
-      
+
       // Apply opacity to all elements
       moonMaterial.opacity = 0.9 * opacity;
       glowMaterial.opacity = 0.25 * opacity;
-      
-      craters.forEach(crater => {
+
+      craters.forEach((crater) => {
         (crater.material as THREE.MeshBasicMaterial).opacity = 0.8 * opacity;
       });
-      
+
       // Remove moon group when fully faded out
       if (fadeProgress === 1) {
         scene.remove(moonGroup);
@@ -117,7 +117,7 @@ export function createBloodMoon(scene: THREE.Scene): () => void {
   }
 
   animateMoon();
-  
+
   // Return the fade out function
   return fadeOut;
 }
