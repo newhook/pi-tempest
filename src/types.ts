@@ -34,7 +34,7 @@ export interface Bullet {
 // Interface for enemy movement controllers
 export interface MovementController {
   // Update enemy position based on current state
-  update(delta: number): { x: number; y: number; angle: number };
+  update(delta: number): { x: number; y: number };
 
   // Optional rendering for special effects (e.g., extension lines)
   render?(scene: THREE.Scene): void;

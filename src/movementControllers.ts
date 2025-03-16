@@ -11,7 +11,7 @@ abstract class BaseMovementController implements MovementController {
     this.angle = Math.random() * Math.PI * 2;
   }
 
-  abstract update(delta: number): { x: number; y: number; angle: number };
+  abstract update(delta: number): { x: number; y: number };
 
   render?(scene: THREE.Scene): void {
     // Optional rendering - override in subclasses if needed
@@ -28,12 +28,12 @@ export class SpokeMovementController extends BaseMovementController {
     super(enemy);
   }
 
-  update(delta: number): { x: number; y: number; angle: number } {
+  update(delta: number): { x: number; y: number } {
     // Just move outward along the original angle
     const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
     const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
 
-    return { x, y, angle: this.angle };
+    return { x, y };
   }
 }
 
@@ -47,7 +47,7 @@ export class SpokeCrossingMovementController extends BaseMovementController {
   constructor(enemy: Enemy) {
     super(enemy);
     this.spokeIndex = Math.floor(
-      (enemy.angle / (Math.PI * 2)) * enemy.level.getSpokeCount()
+      (this.angle / (Math.PI * 2)) * enemy.level.getSpokeCount()
     );
     this.spokeCrossingDirection = Math.random() > 0.5 ? 1 : -1; // clockwise or counterclockwise
     this.spokeCrossingSpeed = 0.01 + Math.random() * 0.03; // random speed for crossing
@@ -57,7 +57,7 @@ export class SpokeCrossingMovementController extends BaseMovementController {
     // numSpokes value in each update call.
   }
 
-  update(delta: number): { x: number; y: number; angle: number } {
+  update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
     // Handle spoke crossing movement
     if (this.enemy.distanceFromCenter > levelRadius * 0.3) {
@@ -79,7 +79,7 @@ export class SpokeCrossingMovementController extends BaseMovementController {
     const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
     const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
 
-    return { x, y, angle: this.angle };
+    return { x, y };
   }
 }
 
@@ -121,7 +121,7 @@ export class ZigzagMovementController extends BaseMovementController {
     };
   }
 
-  update(delta: number): { x: number; y: number; angle: number } {
+  update(delta: number): { x: number; y: number } {
     const numSpokes = this.enemy.level.getSpokeCount();
     // Get current spoke angle
     const spokeAngle =
@@ -226,7 +226,8 @@ export class ZigzagMovementController extends BaseMovementController {
     const x = Math.cos(angle) * this.enemy.distanceFromCenter;
     const y = Math.sin(angle) * this.enemy.distanceFromCenter;
 
-    return { x, y, angle };
+    this.angle = angle;
+    return { x, y };
   }
 
   render(scene: THREE.Scene): void {
@@ -330,14 +331,15 @@ export class CircularMovementController extends BaseMovementController {
   constructor(enemy: Enemy) {
     super(enemy);
   }
-  update(delta: number): { x: number; y: number; angle: number } {
+
+  update(delta: number): { x: number; y: number } {
     // Increment angle for circular motion
-    const newAngle = this.angle + delta * 0.5;
+    this.angle = this.angle + delta * 0.5;
 
-    const x = Math.cos(newAngle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(newAngle) * this.enemy.distanceFromCenter;
+    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
+    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
 
-    return { x, y, angle: newAngle };
+    return { x, y };
   }
 }
 
@@ -346,7 +348,8 @@ export class HomingMovementController extends BaseMovementController {
   constructor(enemy: Enemy) {
     super(enemy);
   }
-  update(delta: number): { x: number; y: number; angle: number } {
+
+  update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
     // Get current enemy position
     const enemyPosX = this.enemy.mesh.position.x;
@@ -422,7 +425,7 @@ export class HomingMovementController extends BaseMovementController {
     const x = Math.cos(newAngle) * this.enemy.distanceFromCenter;
     const y = Math.sin(newAngle) * this.enemy.distanceFromCenter;
 
-    return { x, y, angle: newAngle };
+    return { x, y };
   }
 }
 
@@ -438,7 +441,7 @@ export class PiMovementController extends BaseMovementController {
   constructor(enemy: Enemy) {
     super(enemy);
     this.pathParams = {
-      startAngle: enemy.angle,
+      startAngle: this.angle,
       spiralTightness: 0.1,
       waveAmplitude: 0.7,
       waveFrequency: 3.0,
@@ -446,15 +449,14 @@ export class PiMovementController extends BaseMovementController {
     };
   }
 
-  update(delta: number): { x: number; y: number; angle: number } {
+  update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
     let x, y;
-    let angle = this.angle;
 
     // Always ensure enemies of type 8 and 9 have pathParams for Pi movement
     if ((this.enemy.type === 8 || this.enemy.type === 9) && !this.pathParams) {
       this.pathParams = {
-        startAngle: angle,
+        startAngle: this.angle,
         spiralTightness: 0.1,
         waveAmplitude: 0.7,
         waveFrequency: 3.0,
@@ -498,8 +500,8 @@ export class PiMovementController extends BaseMovementController {
         }
 
         // Update angle for proper orientation
-        angle = Math.atan2(y, x);
-        return { x, y, angle };
+        this.angle = Math.atan2(y, x);
+        return { x, y };
       }
 
       if (normalizedDist < 0.3) {
@@ -555,13 +557,13 @@ export class PiMovementController extends BaseMovementController {
       }
 
       // Update angle for proper orientation
-      angle = Math.atan2(y, x);
+      this.angle = Math.atan2(y, x);
     } else {
-      x = Math.cos(angle) * this.enemy.distanceFromCenter;
-      y = Math.sin(angle) * this.enemy.distanceFromCenter;
+      x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
+      y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
     }
 
-    return { x, y, angle };
+    return { x, y };
   }
 }
 
@@ -577,16 +579,15 @@ export class SpiralMovementController extends BaseMovementController {
   constructor(enemy: Enemy) {
     super(enemy);
     this.pathParams = {
-      startAngle: enemy.angle,
+      startAngle: this.angle,
       spiralTightness: 0.1 + Math.random() * 0.3,
       waveAmplitude: 0.5 + Math.random() * 1.2,
       waveFrequency: 2 + Math.random() * 4,
       pathOffset: Math.random() * Math.PI * 2,
     };
   }
-  update(delta: number): { x: number; y: number; angle: number } {
-    let angle = this.angle;
 
+  update(delta: number): { x: number; y: number } {
     // Spiral path - angle changes as distance increases
     if (this.pathParams) {
       // if (this.enemy.movementStyle === "spiralCrossing") {
@@ -603,15 +604,15 @@ export class SpiralMovementController extends BaseMovementController {
       //     this.enemy.distanceFromCenter * this.pathParams.spiralTightness;
       // }
       // Regular spiral
-      angle =
+      this.angle =
         this.pathParams.startAngle +
         this.enemy.distanceFromCenter * this.pathParams.spiralTightness;
     }
 
-    const x = Math.cos(angle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(angle) * this.enemy.distanceFromCenter;
+    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
+    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
 
-    return { x, y, angle };
+    return { x, y };
   }
 }
 
@@ -627,16 +628,16 @@ export class WaveMovementController extends BaseMovementController {
   constructor(enemy: Enemy) {
     super(enemy);
     this.pathParams = {
-      startAngle: enemy.angle,
+      startAngle: this.angle,
       spiralTightness: 0.1 + Math.random() * 0.3,
       waveAmplitude: 0.5 + Math.random() * 1.2,
       waveFrequency: 2 + Math.random() * 4,
       pathOffset: Math.random() * Math.PI * 2,
     };
   }
-  update(delta: number): { x: number; y: number; angle: number } {
+
+  update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
-    let angle = this.angle;
 
     // Wave path - sinusoidal movement
     if (this.pathParams) {
@@ -670,13 +671,13 @@ export class WaveMovementController extends BaseMovementController {
       //   waveOffset += secondaryWave;
       // }
 
-      angle = baseAngle + waveOffset;
+      this.angle = baseAngle + waveOffset;
     }
 
-    const x = Math.cos(angle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(angle) * this.enemy.distanceFromCenter;
+    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
+    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
 
-    return { x, y, angle };
+    return { x, y };
   }
 }
 
@@ -692,17 +693,17 @@ export class StarMovementController extends BaseMovementController {
   constructor(enemy: Enemy) {
     super(enemy);
     this.pathParams = {
-      startAngle: enemy.angle,
+      startAngle: this.angle,
       spiralTightness: 0.1 + Math.random() * 0.3,
       waveAmplitude: 0.5 + Math.random() * 1.2,
       waveFrequency: 2 + Math.random() * 4,
       pathOffset: Math.random() * Math.PI * 2,
     };
   }
-  update(delta: number): { x: number; y: number; angle: number } {
+
+  update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
     let x, y;
-    let angle = this.angle;
 
     // Star path
     if (this.pathParams) {
@@ -765,7 +766,7 @@ export class StarMovementController extends BaseMovementController {
         // }
       }
 
-      angle = targetAngle;
+      this.angle = targetAngle;
 
       const currentRadius = toOuter
         ? innerRadius +
@@ -777,14 +778,14 @@ export class StarMovementController extends BaseMovementController {
             (this.enemy.distanceFromCenter % (levelRadius / 5))) /
             (levelRadius / 5);
 
-      x = Math.cos(angle) * currentRadius;
-      y = Math.sin(angle) * currentRadius;
+      x = Math.cos(this.angle) * currentRadius;
+      y = Math.sin(this.angle) * currentRadius;
     } else {
-      x = Math.cos(angle) * this.enemy.distanceFromCenter;
-      y = Math.sin(angle) * this.enemy.distanceFromCenter;
+      x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
+      y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
     }
 
-    return { x, y, angle };
+    return { x, y };
   }
 }
 
@@ -793,20 +794,21 @@ export class ErraticMovementController extends BaseMovementController {
   constructor(enemy: Enemy) {
     super(enemy);
   }
-  update(delta: number): { x: number; y: number; angle: number } {
+
+  update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
     // Very erratic zig-zag with random direction changes
-    const angle =
+    this.angle =
       this.angle +
       (Math.sin(this.enemy.distanceFromCenter * 0.5) +
         Math.cos(this.enemy.distanceFromCenter * 0.3)) *
         0.2 +
       (Math.random() - 0.5) * 0.1;
 
-    const x = Math.cos(angle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(angle) * this.enemy.distanceFromCenter;
+    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
+    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
 
-    return { x, y, angle };
+    return { x, y };
   }
 }
 
@@ -822,17 +824,18 @@ export class BounceMovementController extends BaseMovementController {
   constructor(enemy: Enemy) {
     super(enemy);
     this.pathParams = {
-      startAngle: enemy.angle,
+      startAngle: this.angle,
       spiralTightness: 0.1 + Math.random() * 0.3,
       waveAmplitude: 0.5 + Math.random() * 1.2,
       waveFrequency: 2 + Math.random() * 4,
       pathOffset: Math.random() * Math.PI * 2,
     };
   }
-  update(delta: number): { x: number; y: number; angle: number } {
+
+  update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
     let distanceFromCenter = this.enemy.distanceFromCenter;
-    const angle = this.pathParams?.startAngle || this.angle;
+    this.angle = this.pathParams?.startAngle || this.angle;
 
     // Calculate bounce effect
     const bouncePhase = Math.floor(distanceFromCenter / (levelRadius * 0.2));
@@ -847,10 +850,10 @@ export class BounceMovementController extends BaseMovementController {
       distanceFromCenter -= bounceAmount;
     }
 
-    const x = Math.cos(angle) * distanceFromCenter;
-    const y = Math.sin(angle) * distanceFromCenter;
+    const x = Math.cos(this.angle) * distanceFromCenter;
+    const y = Math.sin(this.angle) * distanceFromCenter;
 
-    return { x, y, angle };
+    return { x, y };
   }
 }
 
@@ -863,7 +866,8 @@ export class LinearMovementController extends BaseMovementController {
     this.direction = new THREE.Vector2(Math.cos(angle), Math.sin(angle));
     this.angle = Math.atan2(this.direction.y, this.direction.x);
   }
-  update(delta: number): { x: number; y: number; angle: number } {
+
+  update(delta: number): { x: number; y: number } {
     let x, y;
 
     x =
@@ -874,6 +878,6 @@ export class LinearMovementController extends BaseMovementController {
       this.direction.y * this.enemy.speed * delta * 30;
     this.enemy.distanceFromCenter = Math.sqrt(x * x + y * y);
 
-    return { x, y, angle: this.angle };
+    return { x, y };
   }
 }
