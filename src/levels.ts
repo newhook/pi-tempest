@@ -52,6 +52,26 @@ export class Level {
     // Add Pi digits as background decoration
     this.addPiDigits();
   }
+  
+  // Rotate the level by the given angle (in radians)
+  public rotateLevel(angle: number): void {
+    // Rotate the entire level group
+    this.group.rotation.z += angle;
+    
+    // Update all spoke positions
+    for (let i = 0; i < this.spokePositions.length; i++) {
+      const spoke = this.spokePositions[i];
+      
+      // Update the spoke angle
+      spoke.angle += angle;
+      
+      // Calculate new outer coordinates based on the rotated angle
+      spoke.outerX = Math.cos(spoke.angle) * this.radius;
+      spoke.outerY = Math.sin(spoke.angle) * this.radius;
+      
+      // Inner coordinates remain at 0,0 for center-radiating spokes
+    }
+  }
 
   // Add pi digits as background decoration
   private addPiDigits(): void {

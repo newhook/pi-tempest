@@ -135,6 +135,13 @@ export class ActiveMode implements GameMode {
       }
     }
 
+    // Rotate the second level (Spiral type) if that's the current level
+    if (this.level.levelType === LevelType.Spiral) {
+      // Rotate at a constant speed (adjust the rotation speed as needed)
+      const rotationSpeed = 0.005; // radians per frame
+      this.level.rotateLevel(rotationSpeed * delta * 30);
+    }
+
     // Create new enemies periodically if enemy spawning is enabled
     if (
       this.modeState.spawnEnemies &&
