@@ -113,22 +113,41 @@ export class Enemy {
         break;
 
       case "homing": // Type 7: Homing movement
-        // Calculate vector to center (as a proxy for player position)
-        // In a real implementation, this would use the actual player position
-        const dx = -Math.cos(this.angle) * this.distanceFromCenter * 0.1;
-        const dy = -Math.sin(this.angle) * this.distanceFromCenter * 0.1;
+        // SIMPLE VERSION - direct homing
+        // Calculate current enemy position
+        const enemyPosX = this.mesh.position.x;
+        const enemyPosY = this.mesh.position.y;
+        
+        // Target position (player position)
+        let targetX, targetY;
+        
+        if (this.modeState.playerPosition) {
+          // Use actual player position
+          targetX = this.modeState.playerPosition.x;
+          targetY = this.modeState.playerPosition.y;
+        } else {
+          // Fallback to using player angle on level edge
+          const playerAngle = this.modeState.playerAngle || 0;
+          targetX = Math.cos(playerAngle) * levelRadius;
+          targetY = Math.sin(playerAngle) * levelRadius;
+        }
+        
+        // Calculate angle to target
+        const targetAngle = Math.atan2(targetY - enemyPosY, targetX - enemyPosX);
+        
+        // Calculate difference between current angle and target angle
+        let angleDiff = targetAngle - this.angle;
+        
+        // Normalize to between -PI and PI (for shortest turn)
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        
+        // Very simple turning - fixed rate
+        // Higher turn rate = more aggressive homing
+        const turnSpeed = 1.5;
+        this.angle += angleDiff * delta * turnSpeed;
 
-        // Adjust angle to move toward center/player
-        const targetAngle = Math.atan2(dy, dx);
-        const angleDiff = targetAngle - this.angle;
-
-        // Normalize angle difference
-        const normalizedDiff =
-          ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
-
-        // Gradually turn toward target
-        this.angle += normalizedDiff * delta * 0.5;
-
+        // Calculate new position
         x = Math.cos(this.angle) * this.distanceFromCenter;
         y = Math.sin(this.angle) * this.distanceFromCenter;
         break;
@@ -516,7 +535,7 @@ export class Enemy {
     // Get the player's position for targeting
     let playerDirection: THREE.Vector2;
     const enemyPos = this.mesh.position;
-    
+
     // Use actual player position for targeting if available
     if (this.modeState.playerPosition) {
       // Calculate vector pointing from enemy to player
@@ -530,9 +549,9 @@ export class Enemy {
       const playerAngle = this.modeState.playerAngle || 0;
       const playerPos = {
         x: Math.cos(playerAngle) * 10, // Assuming level radius is about 10
-        y: Math.sin(playerAngle) * 10
+        y: Math.sin(playerAngle) * 10,
       };
-      
+
       playerDirection = new THREE.Vector2(
         playerPos.x - enemyPos.x,
         playerPos.y - enemyPos.y

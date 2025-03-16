@@ -46,7 +46,7 @@ export class EnemyManager {
 
     // Select a random enemy type from the available range
     // const enemyType = Math.floor(Math.random() * (maxEnemyType + 1));
-    let enemyType = 8;
+    let enemyType = 7;
 
     // Create enemy geometry based on the enemy type
     const enemyGeometry = Enemy.getGeometry(enemyType);
