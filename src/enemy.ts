@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { GameState, ActiveModeState } from "./types";
+import { GameState, ActiveModeState, MovementController } from "./types";
+import { createMovementController } from "./movementControllers";
 
 // Class representing an individual enemy
 export class Enemy {
@@ -16,26 +17,18 @@ export class Enemy {
   public spokeIndex?: number;
   public spokeCrossingDirection?: number;
   public spokeCrossingSpeed?: number;
-  private gameState: GameState;
-  private modeState: ActiveModeState;
-  private scene: THREE.Scene;
+  public gameState: GameState; // Changed to public for access by controllers
+  public modeState: ActiveModeState; // Changed to public for access by controllers
+  public scene: THREE.Scene; // Changed to public for access by controllers
   // Number of spokes in the current level (needed for spoke movement)
-  private numSpokes: number = 8;
+  public numSpokes: number = 8; // Changed to public for access by controllers
   private lastFireTime: number = 0; // Track time since last bullet fired
   // For zigzag tracking
-  private originalAngle?: number;
-  // For zigzag extension line visualization
-  private extensionLine?: THREE.Line;
-  // For zigzag spoke-to-spoke movement
-  private zigzagState?: {
-    currentSpoke: number;
-    targetSpoke: number | null;
-    transitionProgress: number;
-    isExtending: boolean;
-    extensionProgress: number;
-    phase: number;
-    nextTransitionDistance: number;
-  };
+  public originalAngle?: number;
+
+  // Movement controller to handle specific movement patterns
+  private movementController: MovementController;
+
   public pathParams?: {
     startAngle: number;
     spiralTightness: number;
@@ -70,572 +63,32 @@ export class Enemy {
     this.gameState = gameState;
     this.modeState = modeState;
     this.direction = direction;
+
+    // Create the appropriate movement controller based on movement style
+    this.movementController = createMovementController(movementStyle);
+
+    // Initialize the controller with this enemy and any needed parameters
+    this.movementController.initialize(this, { numSpokes: this.numSpokes });
   }
 
   // Update enemy position based on movement style
   update(delta: number, levelRadius: number, numSpokes: number = 8): void {
-    // Store number of spokes for spoke-based movement
-    if (
-      this.movementStyle === "spoke" ||
-      this.movementStyle === "spokeCrossing"
-    ) {
-      this.numSpokes = numSpokes;
-    }
+    // Store number of spokes for movement
+    this.numSpokes = numSpokes;
 
     // Increment distance from center for all movement types
     this.distanceFromCenter += this.speed * delta * 30;
 
-    // Calculate new position based on movement style
-    let x: number, y: number;
+    // Use the movement controller to update position and angle
+    const result = this.movementController.update(
+      delta,
+      levelRadius,
+      numSpokes
+    );
 
-    switch (this.movementStyle) {
-      case "erratic": // Type 6: Chaotic movement
-        // Very erratic zig-zag with random direction changes
-        this.angle +=
-          (Math.sin(this.distanceFromCenter * 0.5) +
-            Math.cos(this.distanceFromCenter * 0.3)) *
-          0.2;
-        // Add some random jitter
-        this.angle += (Math.random() - 0.5) * 0.1;
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
-        break;
-
-      case "bounce": // Type 5: Bouncing movement
-        // Calculate bounce effect
-        const bouncePhase = Math.floor(
-          this.distanceFromCenter / (levelRadius * 0.2)
-        );
-        const bounceProgress =
-          (this.distanceFromCenter % (levelRadius * 0.2)) / (levelRadius * 0.2);
-
-        // Switch direction on each bounce phase
-        if (bouncePhase % 2 === 0) {
-          // Moving outward
-          this.angle = this.pathParams?.startAngle || this.angle;
-        } else {
-          // Moving inward temporarily
-          this.angle = this.pathParams?.startAngle || this.angle;
-          // Temporarily reduce distance to create bounce effect
-          const bounceAmount =
-            Math.sin(bounceProgress * Math.PI) * (levelRadius * 0.1);
-          this.distanceFromCenter -= bounceAmount;
-        }
-
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
-        break;
-
-      case "homing": // Type 7: Homing movement with erratic behavior
-        // Calculate current enemy position
-        const enemyPosX = this.mesh.position.x;
-        const enemyPosY = this.mesh.position.y;
-        
-        // Target position (player position)
-        let targetX, targetY;
-        
-        if (this.modeState.playerPosition) {
-          // Use actual player position
-          targetX = this.modeState.playerPosition.x;
-          targetY = this.modeState.playerPosition.y;
-        } else {
-          // Fallback to using player angle on level edge
-          const playerAngle = this.modeState.playerAngle || 0;
-          targetX = Math.cos(playerAngle) * levelRadius;
-          targetY = Math.sin(playerAngle) * levelRadius;
-        }
-        
-        // Calculate angle to target
-        const targetAngle = Math.atan2(targetY - enemyPosY, targetX - enemyPosX);
-        
-        // Calculate difference between current angle and target angle
-        let angleDiff = targetAngle - this.angle;
-        
-        // Normalize to between -PI and PI (for shortest turn)
-        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-        
-        // Base turn rate - distance-based for smoother targeting
-        // As enemy gets closer to player, it turns more smoothly and precisely
-        const distanceFactor = Math.min(0.8, this.distanceFromCenter / levelRadius);
-        const turnRate = 0.8 + (distanceFactor * 0.4); // 0.8-1.2 range
-        
-        // Apply distance-based behavior dampening
-        // Reduce oscillation as enemies get closer to edge (where player is)
-        const proximityDampen = 1 - (this.distanceFromCenter / levelRadius) * 0.8;
-        
-        // 1. Subtle "hunting" oscillation - reduced when close to player
-        const huntingOscillation = Math.sin(this.distanceFromCenter * 2) * 0.02 * proximityDampen;
-        
-        // 2. Very mild course corrections - also reduced when close
-        const courseCorrection = Math.sin(this.distanceFromCenter * 3) * 0.02 * proximityDampen;
-        
-        // 3. Extremely tiny random jitter - just for a touch of life
-        const tinyJitter = (Math.random() - 0.5) * 0.01 * proximityDampen;
-        
-        // Apply basic smooth tracking with minimal irregularities
-        // Strict limit on maximum turn per frame
-        const maxTurnPerFrame = 0.04; // About 2.3 degrees max per frame
-        
-        // Calculate total turn amount with reduced irregularities
-        let totalTurn = (angleDiff * delta * turnRate) + 
-                       huntingOscillation + 
-                       courseCorrection + 
-                       tinyJitter;
-                        
-        // Strictly clamp the turn to prevent pendulum effect
-        if (totalTurn > maxTurnPerFrame) totalTurn = maxTurnPerFrame;
-        if (totalTurn < -maxTurnPerFrame) totalTurn = -maxTurnPerFrame;
-        
-        this.angle += totalTurn;
-
-        // Calculate new position
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
-        break;
-
-      case "zigzag":
-        // NEW DESIGN: Zigzag between spokes with line-then-zip behavior
-        // We need to track state for this movement type
-        
-        // Initialize special zigzag state if not set yet
-        if (!this.zigzagState) {
-          // Use numSpokes to determine spoke positions
-          this.zigzagState = {
-            // Current spoke index
-            currentSpoke: Math.floor(Math.random() * numSpokes),
-            // Target spoke (where we're moving to)
-            targetSpoke: null,
-            // Progress along the transition (0-1)
-            transitionProgress: 0,
-            // Line "extension" phase (true) or "zip" phase (false)
-            isExtending: true,
-            // Line extension progress (0-1)
-            extensionProgress: 0,
-            // Movement phase (0: along spoke, 1: transitioning between spokes)
-            phase: 0,
-            // Distance when we start next transition 
-            nextTransitionDistance: 1 + Math.random() * 2
-          };
-        }
-        
-        // Get current spoke angle
-        const spokeAngle = (this.zigzagState.currentSpoke / numSpokes) * Math.PI * 2;
-        
-        // If we're in phase 0 (moving along spoke), check if we need to switch to transition
-        if (this.zigzagState.phase === 0) {
-          // Move outward along spoke
-          this.angle = spokeAngle;
-          
-          // If we've reached the transition distance, set up next transition
-          if (this.distanceFromCenter >= this.zigzagState.nextTransitionDistance) {
-            // Switch to transition phase
-            this.zigzagState.phase = 1;
-            
-            // Choose a target spoke (different from current)
-            let nextSpokeOffset;
-            // Random jump distance between 1-3 spokes
-            const jumpDistance = 1 + Math.floor(Math.random() * 3);
-            
-            // 50% chance to go clockwise vs counter-clockwise
-            if (Math.random() > 0.5) {
-              nextSpokeOffset = jumpDistance;
-            } else {
-              nextSpokeOffset = numSpokes - jumpDistance;
-            }
-            
-            // Calculate target spoke index
-            this.zigzagState.targetSpoke = 
-              (this.zigzagState.currentSpoke + nextSpokeOffset) % numSpokes;
-            
-            // Start extension phase
-            this.zigzagState.isExtending = true;
-            this.zigzagState.extensionProgress = 0;
-            this.zigzagState.transitionProgress = 0;
-          }
-        }
-        
-        // Phase 1: Transition between spokes
-        if (this.zigzagState.phase === 1) {
-          // Get target spoke angle
-          const targetSpokeAngle = (this.zigzagState.targetSpoke / numSpokes) * Math.PI * 2;
-          
-          // Phase 1a: Extending line toward target spoke
-          if (this.zigzagState.isExtending) {
-            // Extend line from current spoke toward target spoke
-            this.zigzagState.extensionProgress += delta * 3; // Speed of extension
-            
-            // If extension complete, begin zip phase
-            if (this.zigzagState.extensionProgress >= 1) {
-              this.zigzagState.isExtending = false;
-              this.zigzagState.transitionProgress = 0;
-            }
-            
-            // During extension phase, keep position on current spoke
-            // but render a "line" to the target (handled elsewhere)
-            this.angle = spokeAngle;
-          }
-          // Phase 1b: Zipping along the extended line
-          else {
-            // Zip along line from current to target spoke
-            this.zigzagState.transitionProgress += delta * 8; // Speed of zip movement
-            
-            // If zip complete, transition to target spoke
-            if (this.zigzagState.transitionProgress >= 1) {
-              // Complete transition to new spoke
-              this.zigzagState.currentSpoke = this.zigzagState.targetSpoke;
-              this.zigzagState.targetSpoke = null;
-              
-              // Return to spoke movement phase
-              this.zigzagState.phase = 0;
-              
-              // Set next transition distance
-              this.zigzagState.nextTransitionDistance = 
-                this.distanceFromCenter + 1 + Math.random() * 2;
-              
-              // Set to target spoke angle
-              this.angle = targetSpokeAngle;
-            } 
-            // During zip movement, interpolate between spoke angles
-            else {
-              // Easing function for smooth acceleration/deceleration 
-              const t = this.zigzagState.transitionProgress;
-              const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-              
-              // Interpolate between spoke angles for smooth movement
-              const angleDiff = targetSpokeAngle - spokeAngle;
-              // Handle wrapping around 2π
-              const wrappedDiff = 
-                ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
-              
-              this.angle = spokeAngle + wrappedDiff * eased;
-            }
-          }
-        }
-        
-        // Calculate position
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
-        break;
-
-      case "circular":
-        this.angle += delta * 0.5;
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
-        break;
-
-      case "spiral":
-      case "spiralCrossing":
-        // Spiral path - angle changes as distance increases
-        if (this.pathParams) {
-          if (this.movementStyle === "spiralCrossing") {
-            // Add cross-path variation to the spiral
-            this.angle =
-              this.pathParams.startAngle +
-              this.distanceFromCenter * this.pathParams.spiralTightness +
-              Math.sin(this.distanceFromCenter * 0.2) * 0.5; // Add oscillation for crossing
-          } else {
-            // Regular spiral
-            this.angle =
-              this.pathParams.startAngle +
-              this.distanceFromCenter * this.pathParams.spiralTightness;
-          }
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
-        } else {
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
-        }
-        break;
-
-      case "wave":
-      case "waveCrossing":
-        // Wave path - sinusoidal movement
-        if (this.pathParams) {
-          // Base angle determines the spoke we're moving along
-          const baseAngle = this.pathParams.startAngle;
-
-          // Calculate wave offset
-          let waveOffset =
-            (Math.sin(
-              (this.distanceFromCenter * this.pathParams.waveFrequency) /
-                levelRadius
-            ) *
-              this.pathParams.waveAmplitude) /
-            levelRadius;
-
-          // For crossing waves, add an additional perpendicular wave component
-          if (this.movementStyle === "waveCrossing") {
-            // Add a secondary wave that's out of phase
-            const secondaryWave =
-              (Math.cos(
-                (this.distanceFromCenter *
-                  this.pathParams.waveFrequency *
-                  1.5) /
-                  levelRadius
-              ) *
-                this.pathParams.waveAmplitude *
-                0.7) /
-              levelRadius;
-
-            // Combine the waves
-            waveOffset += secondaryWave;
-          }
-
-          this.angle = baseAngle + waveOffset;
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
-        } else {
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
-        }
-        break;
-
-      case "pi":
-      case "piCrossing":
-        // Pi symbol path
-        // Always ensure enemies of type 8 and 9 have pathParams for Pi movement
-        if ((this.type === 8 || this.type === 9) && !this.pathParams) {
-          this.pathParams = {
-            startAngle: this.angle,
-            spiralTightness: 0.1,
-            waveAmplitude: 0.7,
-            waveFrequency: 3.0,
-            pathOffset: Math.random() * Math.PI * 2,
-          };
-        }
-
-        if (this.pathParams) {
-          // Calculate position along pi symbol
-          // The pi symbol consists of:
-          // 1. A horizontal bar at the top
-          // 2. Two vertical lines coming down from the bar
-
-          // Normalize distance to create pi symbol within level radius
-          const normalizedDist = this.distanceFromCenter / levelRadius;
-
-          // Random starting position on Pi symbol for enemy types 8 and 9
-          if (
-            this.distanceFromCenter === 0 &&
-            (this.type === 8 || this.type === 9)
-          ) {
-            // Randomly decide which part of the Pi symbol to start on
-            const piPart = Math.floor(Math.random() * 3); // 0: horizontal, 1: left leg, 2: right leg
-
-            if (piPart === 0) {
-              // Start on horizontal bar - random position along the bar
-              const t = Math.random(); // 0 to 1 position along the bar
-              x = -levelRadius * 0.5 + t * levelRadius;
-              y = -levelRadius * 0.15;
-              this.distanceFromCenter = 0.4 * levelRadius; // Skip initial approach
-            } else if (piPart === 1) {
-              // Start on left leg - random position along the leg
-              x = -levelRadius * 0.4;
-              y = -levelRadius * 0.15 - Math.random() * levelRadius * 0.85;
-              this.distanceFromCenter = 0.6 * levelRadius; // Skip to vertical part
-            } else {
-              // Start on right leg - random position along the leg
-              x = levelRadius * 0.4;
-              y = -levelRadius * 0.15 - Math.random() * levelRadius * 0.85;
-              this.distanceFromCenter = 0.6 * levelRadius; // Skip to vertical part
-            }
-
-            // Update angle for proper orientation
-            this.angle = Math.atan2(y, x);
-            return; // Return early after setting initial position
-          }
-
-          if (normalizedDist < 0.3) {
-            // Initial approach from center
-            x =
-              this.pathParams.startAngle < Math.PI
-                ? -normalizedDist * levelRadius * 0.5
-                : normalizedDist * levelRadius * 0.5;
-            y = -normalizedDist * levelRadius * 0.5;
-          } else if (normalizedDist < 0.5) {
-            // Moving to horizontal bar position
-            const t = (normalizedDist - 0.3) / 0.2;
-            x =
-              this.pathParams.startAngle < Math.PI
-                ? -levelRadius * 0.5 + t * levelRadius
-                : levelRadius * 0.5 - t * levelRadius;
-            y = -levelRadius * 0.15;
-          } else {
-            // Moving down vertical line - default positions
-            // Determine which leg of Pi to follow based on angle
-            let legPosition;
-            if (this.pathParams.startAngle < Math.PI * 0.67) {
-              legPosition = -levelRadius * 0.4; // Left leg
-            } else if (this.pathParams.startAngle < Math.PI * 1.33) {
-              legPosition = 0; // Middle (for type 9)
-            } else {
-              legPosition = levelRadius * 0.4; // Right leg
-            }
-
-            // For crossing pi, allow swapping between legs
-            if (this.movementStyle === "piCrossing" && normalizedDist > 0.7) {
-              const crossPhase = Math.floor((normalizedDist - 0.7) * 10);
-              if (crossPhase % 2 === 1) {
-                // Periodically swap legs
-                if (legPosition === -levelRadius * 0.4) {
-                  legPosition = 0;
-                } else if (legPosition === 0) {
-                  legPosition =
-                    legPosition === -levelRadius * 0.4
-                      ? levelRadius * 0.4
-                      : -levelRadius * 0.4;
-                } else {
-                  legPosition = 0;
-                }
-              }
-
-              // Add some subtle horizontal oscillation
-              legPosition += Math.sin(normalizedDist * 15) * 0.1 * levelRadius;
-            }
-
-            x = legPosition;
-            y =
-              -levelRadius * 0.15 - (normalizedDist - 0.5) * levelRadius * 0.85;
-          }
-
-          // Update angle for proper orientation
-          this.angle = Math.atan2(y, x);
-        } else {
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
-        }
-        break;
-
-      case "star":
-      case "starCrossing":
-        // Star path
-        if (this.pathParams) {
-          // Number of star points increases with level
-          const starPoints =
-            3 + (Math.floor(this.pathParams.waveFrequency * 2) % 5);
-          const pointAngle = (Math.PI * 2) / starPoints;
-
-          // Calculate which point we're moving toward
-          let pointIndex = Math.floor(
-            (this.pathParams.startAngle / (Math.PI * 2)) * starPoints
-          );
-
-          // For crossing stars, occasionally jump to a different point
-          if (this.movementStyle === "starCrossing") {
-            const jumpPhase = Math.floor(
-              this.distanceFromCenter / (levelRadius * 0.2)
-            );
-            if (
-              jumpPhase % 3 === 0 &&
-              this.distanceFromCenter > levelRadius * 0.3
-            ) {
-              // Jump to a different point randomly
-              pointIndex =
-                (pointIndex +
-                  1 +
-                  Math.floor(Math.random() * (starPoints - 2))) %
-                starPoints;
-            }
-          }
-
-          const nextPointIndex = (pointIndex + 1) % starPoints;
-
-          // Calculate angle to current and next point
-          const currentPointAngle = pointIndex * pointAngle;
-          const nextPointAngle = nextPointIndex * pointAngle;
-
-          // Interpolate between inner and outer radius
-          const innerRadius = levelRadius * 0.4;
-          const outerRadius = levelRadius;
-
-          // Determine if we're moving to outer point or inner corner
-          const toOuter =
-            Math.floor((this.distanceFromCenter / levelRadius) * 10) % 2 === 0;
-
-          // For crossing stars, add some oscillation to the angle
-          let targetAngle;
-          if (toOuter) {
-            // Moving to outer point
-            targetAngle = currentPointAngle;
-            if (this.movementStyle === "starCrossing") {
-              // Add slight wobble when moving to points
-              targetAngle += Math.sin(this.distanceFromCenter * 2) * 0.1;
-            }
-          } else {
-            // Moving to inner corner
-            targetAngle = currentPointAngle + pointAngle / 2;
-            if (this.movementStyle === "starCrossing") {
-              // Add slight wobble when moving to corners
-              targetAngle += Math.cos(this.distanceFromCenter * 3) * 0.15;
-            }
-          }
-
-          this.angle = targetAngle;
-
-          const currentRadius = toOuter
-            ? innerRadius +
-              ((outerRadius - innerRadius) *
-                (this.distanceFromCenter % (levelRadius / 5))) /
-                (levelRadius / 5)
-            : outerRadius -
-              ((outerRadius - innerRadius) *
-                (this.distanceFromCenter % (levelRadius / 5))) /
-                (levelRadius / 5);
-
-          x = Math.cos(this.angle) * currentRadius;
-          y = Math.sin(this.angle) * currentRadius;
-        } else {
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
-        }
-        break;
-
-      case "spoke":
-        // Default spoke movement - just move outward along the spoke
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
-        break;
-
-      case "spokeCrossing":
-        // Handle spoke crossing movement
-        if (this.distanceFromCenter > levelRadius * 0.3) {
-          // Calculate crossover effect based on distance from center
-          const crossFactor = Math.min(
-            1,
-            (this.distanceFromCenter / levelRadius) * 2
-          );
-
-          // Gradually shift the angle based on distance from center
-          this.angle +=
-            this.spokeCrossingDirection! *
-            this.spokeCrossingSpeed! *
-            crossFactor *
-            delta *
-            10;
-        }
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
-        break;
-
-      case "linear":
-        // Linear movement with direction vector
-        if (this.direction) {
-          x = this.mesh.position.x + this.direction.x * this.speed * delta * 30;
-          y = this.mesh.position.y + this.direction.y * this.speed * delta * 30;
-          this.distanceFromCenter = Math.sqrt(x * x + y * y);
-        } else {
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
-        }
-        break;
-
-      default:
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
-    }
-
-    // Apply position
-    this.mesh.position.set(x, y, 0);
+    // Apply the position and angle from the controller
+    this.mesh.position.set(result.x, result.y, 0);
+    this.angle = result.angle;
 
     // Rotate enemy for visual effect
     this.mesh.rotation.x += delta * 2;
@@ -644,19 +97,10 @@ export class Enemy {
     // Scale enemy as it moves outward for better visibility
     const scale = 0.5 + this.distanceFromCenter / (levelRadius * 2);
     this.mesh.scale.set(scale, scale, scale);
-    
-    // Special visualization for zigzag enemies in extension phase
-    if (this.movementStyle === "zigzag" && 
-        this.zigzagState && 
-        this.zigzagState.phase === 1 &&
-        this.zigzagState.isExtending) {
-      
-      // Create or update the extension line visualization
-      this.createExtensionLine(levelRadius);
-    } else if (this.extensionLine) {
-      // Remove extension line when not in extension phase
-      this.scene.remove(this.extensionLine);
-      this.extensionLine = undefined;
+
+    // Call the movement controller's optional render method for special effects
+    if (this.movementController.render) {
+      this.movementController.render(this.scene);
     }
 
     // For enemy type 8, fire bullets at the player
@@ -806,6 +250,11 @@ export class Enemy {
       this.createAdditionalEnemies(this.mesh.position);
     }
 
+    // Clean up any resources from the movement controller
+    if (this.movementController.cleanup) {
+      this.movementController.cleanup(this.scene);
+    }
+
     // Play explosion sound
     // const audio = new Audio("explosion-1.mp3");
     // audio.play();
@@ -926,73 +375,6 @@ export class Enemy {
     }
   }
 
-  // Create the extension line for zigzag enemies during the extension phase
-  private createExtensionLine(levelRadius: number): void {
-    if (!this.zigzagState || !this.zigzagState.targetSpoke) return;
-    
-    // Calculate current and target positions
-    const currentSpokeAngle = (this.zigzagState.currentSpoke / this.numSpokes) * Math.PI * 2;
-    const targetSpokeAngle = (this.zigzagState.targetSpoke / this.numSpokes) * Math.PI * 2;
-    
-    // Get positions for line endpoints
-    const startPos = new THREE.Vector3(
-      Math.cos(currentSpokeAngle) * this.distanceFromCenter,
-      Math.sin(currentSpokeAngle) * this.distanceFromCenter,
-      0
-    );
-    
-    // Target position at the same distance from center but on target spoke
-    const endDistance = this.distanceFromCenter * this.zigzagState.extensionProgress;
-    const endPos = new THREE.Vector3(
-      Math.cos(targetSpokeAngle) * endDistance,
-      Math.sin(targetSpokeAngle) * endDistance,
-      0
-    );
-    
-    // Create or update line
-    if (!this.extensionLine) {
-      // Create line geometry
-      const lineGeometry = new THREE.BufferGeometry();
-      const linePositions = new Float32Array([
-        startPos.x, startPos.y, startPos.z,
-        endPos.x, endPos.y, endPos.z
-      ]);
-      
-      lineGeometry.setAttribute(
-        'position',
-        new THREE.BufferAttribute(linePositions, 3)
-      );
-      
-      // Create line material - color matches enemy
-      const enemyMaterial = this.mesh.material as THREE.MeshStandardMaterial;
-      const lineMaterial = new THREE.LineBasicMaterial({ 
-        color: enemyMaterial.color,
-        linewidth: 2,
-        opacity: 0.7,
-        transparent: true
-      });
-      
-      // Create line and add to scene
-      this.extensionLine = new THREE.Line(lineGeometry, lineMaterial);
-      this.scene.add(this.extensionLine);
-    } else {
-      // Update existing line
-      const positions = this.extensionLine.geometry.attributes.position.array as Float32Array;
-      
-      // Update start position
-      positions[0] = startPos.x;
-      positions[1] = startPos.y;
-      positions[2] = startPos.z;
-      
-      // Update end position
-      positions[3] = endPos.x;
-      positions[4] = endPos.y;
-      positions[5] = endPos.z;
-      
-      this.extensionLine.geometry.attributes.position.needsUpdate = true;
-    }
-  }
-  
   // Create explosion particles
   private createExplosion(position: THREE.Vector3, color: THREE.Color): void {
     const particleCount = 50;

@@ -30,3 +30,18 @@ export interface Bullet {
   speed: number;
   fromEnemy?: boolean; // Flag to identify enemy bullets
 }
+
+// Interface for enemy movement controllers
+export interface MovementController {
+  // Initialize the controller with any needed parameters
+  initialize(enemy: any, params?: any): void;
+  
+  // Update enemy position based on current state
+  update(delta: number, levelRadius: number, numSpokes: number): { x: number, y: number, angle: number };
+  
+  // Optional rendering for special effects (e.g., extension lines)
+  render?(scene: THREE.Scene): void;
+  
+  // Clean up any resources when the enemy is destroyed
+  cleanup?(scene: THREE.Scene): void;
+}

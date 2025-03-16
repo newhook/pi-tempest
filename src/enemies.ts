@@ -259,11 +259,6 @@ export class EnemyManager {
     }
   }
 
-  // Determine if a level has spokes (all levels have spokes)
-  private levelHasSpokes(): boolean {
-    return true; // Every level has spokes
-  }
-
   update(delta: number): void {
     // Update number of spokes if level changed
     this.updateSpokeCount();
