@@ -84,6 +84,7 @@ export class ActiveMode implements GameMode {
 
     // Show the initial countdown time of 60 seconds
     updateCountdownTimer(60);
+<<<<<<< HEAD
 
     // Initialize or update the lives display
     import("../ui").then((ui) => ui.updateLives(this.gameState));
@@ -96,6 +97,8 @@ export class ActiveMode implements GameMode {
     // Reset rotation direction change timer for Pi symbol level
     this.piLevelRotationDirection = Math.random() < 0.5 ? 1 : -1; // Random initial direction
     this.nextDirectionChangeTime = this.clock.getElapsedTime() + 5 + Math.random() * 5; // Change direction after 5-10 seconds
+=======
+>>>>>>> origin/main
 
     // Reset enemy spawn timer to start spawning enemies
     this.nextEnemyTime = this.clock.getElapsedTime();
@@ -151,6 +154,7 @@ export class ActiveMode implements GameMode {
       }
     }
 
+<<<<<<< HEAD
     // Rotate certain level types
     if (this.level.levelType === LevelType.Spiral) {
       // Rotate Spiral level at a constant speed
@@ -180,6 +184,8 @@ export class ActiveMode implements GameMode {
       this.level.rotateLevel(-1 * rotationSpeed * delta * 30);
     }
 
+=======
+>>>>>>> origin/main
     // Create new enemies periodically if enemy spawning is enabled
     if (
       this.modeState.spawnEnemies &&
@@ -386,10 +392,13 @@ export class ActiveMode implements GameMode {
     // Reset enemy spawning to random
     this.modeState.forcedEnemyType = undefined;
     this.updateForcedEnemyTypeDisplay();
+<<<<<<< HEAD
     
     // Reset rotation direction change timer for Pi symbol level
     this.piLevelRotationDirection = Math.random() < 0.5 ? 1 : -1; // Random initial direction
     this.nextDirectionChangeTime = this.clock.getElapsedTime() + 5 + Math.random() * 5; // Change after 5-10 seconds
+=======
+>>>>>>> origin/main
 
     // Reset player position to level outline
     const playerPosition = this.getPositionOnLevelOutline(
@@ -405,8 +414,11 @@ export class ActiveMode implements GameMode {
 
     // Reset the countdown timer for the new level
     updateCountdownTimer(60);
+<<<<<<< HEAD
 
     // No level start messages on level transitions
+=======
+>>>>>>> origin/main
 
     // Give a brief period of invulnerability after level change
     this.modeState.ghostMode = true;

@@ -379,35 +379,35 @@ export class EnemyManager {
         // Get normalized angle between 0 and 2π
         let angle = Math.atan2(enemyPos.y, enemyPos.x);
         if (angle < 0) angle += Math.PI * 2;
-        
+
         const starPoints = 3 + (level.levelNumber % 5);
         const totalVertices = starPoints * 2; // Total vertices (inner + outer points)
         const anglePerVertex = (Math.PI * 2) / totalVertices;
-        
+
         // Determine which segment of the star we're in
         const vertexIndex = Math.floor(angle / anglePerVertex);
-        
+
         // Calculate progress within the current segment (0 to 1)
         const segmentProgress = (angle % anglePerVertex) / anglePerVertex;
-        
+
         // Get the radii and angles of the current and next vertex
         const currentIsOuter = vertexIndex % 2 === 0;
         const currentRadius = currentIsOuter ? levelRadius : levelRadius * 0.6;
         const nextRadius = currentIsOuter ? levelRadius * 0.6 : levelRadius;
-        
+
         const currentAngle = vertexIndex * anglePerVertex;
         const nextAngle = ((vertexIndex + 1) % totalVertices) * anglePerVertex;
-        
+
         // Calculate the exact boundary position by interpolating between vertices
         const currentX = Math.cos(currentAngle) * currentRadius;
         const currentY = Math.sin(currentAngle) * currentRadius;
         const nextX = Math.cos(nextAngle) * nextRadius;
         const nextY = Math.sin(nextAngle) * nextRadius;
-        
+
         // Linear interpolation between the two vertices based on segment progress
         const boundaryX = currentX + (nextX - currentX) * segmentProgress;
         const boundaryY = currentY + (nextY - currentY) * segmentProgress;
-        
+
         // Use the calculated boundary position
         explosionPosition = new THREE.Vector3(boundaryX, boundaryY, 0);
         break;
