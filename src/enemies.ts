@@ -357,6 +357,9 @@ export class EnemyManager {
         }
 
         this.gameState.score -= Math.floor(enemy.getPoints() / 2);
+        if (this.gameState.score < 0) {
+          this.gameState.score = 0;
+        }
         updateScore(this.gameState);
 
         // Remove the enemy
