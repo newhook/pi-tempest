@@ -248,6 +248,9 @@ class EnemyExplosion {
   }
 }
 
+// Make EnemyExplosion class available for export
+export { EnemyExplosion };
+
 export class EnemyManager {
   private scene: THREE.Scene;
   private gameState: GameState;
@@ -425,5 +428,11 @@ export class EnemyManager {
     }
 
     return false; // No collision
+  }
+  
+  // Create an explosion at a specific position
+  createExplosionAtPosition(position: THREE.Vector3, color: THREE.Color): void {
+    // Create an explosion effect at the specified position
+    new EnemyExplosion(this.scene, position, color, this.modeState);
   }
 }

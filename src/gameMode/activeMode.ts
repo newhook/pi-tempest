@@ -560,17 +560,48 @@ export class ActiveMode implements GameMode {
       bullet.mesh.position.x += bullet.direction.x * bullet.speed;
       bullet.mesh.position.y += bullet.direction.y * bullet.speed;
 
-      // Remove bullets that are too far from center or out of bounds
+      // Calculate distance from center
       const distanceFromCenter = Math.sqrt(
         bullet.mesh.position.x * bullet.mesh.position.x +
           bullet.mesh.position.y * bullet.mesh.position.y
       );
 
-      if (distanceFromCenter < 1 || distanceFromCenter > this.levelRadius + 5) {
+      // Check if bullet goes out of bounds or too close to center
+      if (distanceFromCenter < 1) {
+        // Too close to center, just remove the bullet
+        this.sceneSetup.scene.remove(bullet.mesh);
+        this.modeState.enemyBullets.splice(i, 1);
+      } else if (distanceFromCenter > this.levelRadius) {
+        // Reached the level boundary
+        if (bullet.isBomb) {
+          // Create an explosion at the level boundary for bombs
+          this.createBombExplosion(bullet);
+        }
+        
+        // Remove the bullet
         this.sceneSetup.scene.remove(bullet.mesh);
         this.modeState.enemyBullets.splice(i, 1);
       }
     }
+  }
+  
+  // Create an explosion when a bomb hits the level boundary
+  private createBombExplosion(bomb: Bullet): void {
+    // Calculate position at boundary
+    const bulletPos = bomb.mesh.position;
+    const direction = new THREE.Vector3(bulletPos.x, bulletPos.y, 0).normalize();
+    
+    // Get the position on the boundary by calculating intersection with level shape
+    // For simplicity, we'll use a circular boundary calculation
+    const boundaryPosition = direction.clone().multiplyScalar(this.levelRadius);
+    
+    // Get the color of the bomb to match the explosion color
+    const bombMaterial = bomb.mesh.material as THREE.MeshStandardMaterial;
+    const bombColor = bombMaterial.color || new THREE.Color(0xff6600); // Default orange if not available
+    
+    // Import EnemyExplosion class from enemies.ts
+    // We'll directly use the EnemyManager to create an explosion
+    this.enemyManager.createExplosionAtPosition(boundaryPosition, bombColor);
   }
 
   // Check if player is hit by any enemy bullets

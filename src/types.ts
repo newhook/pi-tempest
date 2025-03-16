@@ -32,6 +32,7 @@ export interface Bullet {
   direction: THREE.Vector2;
   speed: number;
   fromEnemy?: boolean; // Flag to identify enemy bullets
+  isBomb?: boolean; // Flag to identify bullets that explode when they hit the level boundary
 }
 
 // Interface for enemy movement controllers

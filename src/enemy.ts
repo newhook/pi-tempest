@@ -181,6 +181,11 @@ export class Enemy {
     if (this.type === 8) {
       this.tryFireBullet(delta);
     }
+
+    // For enemy type 9, fire bombs that explode on boundary contact
+    if (this.type === 9) {
+      this.tryFireBomb(delta);
+    }
   }
 
   remove(): void {
@@ -215,18 +220,7 @@ export class Enemy {
 
   // Try to fire a bullet at the player
   private tryFireBullet(delta: number): void {
-    // Only fire bullets when enemy is within a certain range
-    const minFireDistance = 3; // Min distance from center to start firing
-    const maxFireDistance = 8; // Max distance from center to stop firing
-
-    // Check if enemy is in firing range
-    if (
-      this.distanceFromCenter < minFireDistance ||
-      this.distanceFromCenter > maxFireDistance
-    ) {
-      return;
-    }
-
+    console.log("tryFireBullet");
     // Add time to last fire counter
     this.lastFireTime += delta;
 
@@ -236,6 +230,21 @@ export class Enemy {
     if (this.lastFireTime > fireInterval) {
       this.lastFireTime = 0; // Reset fire timer
       this.fireBullet();
+    }
+  }
+
+  // Try to fire a bomb that explodes on boundary contact
+  private tryFireBomb(delta: number): void {
+    console.log("tryFireBomb");
+    // Add time to last fire counter
+    this.lastFireTime += delta;
+
+    // Fire bombs every 3-5 seconds (less frequent than regular bullets)
+    const fireInterval = 3 + Math.random() * 2;
+
+    if (this.lastFireTime > fireInterval) {
+      this.lastFireTime = 0; // Reset fire timer
+      this.fireBomb();
     }
   }
 
@@ -320,6 +329,109 @@ export class Enemy {
     const audio = new Audio();
     audio.volume = 0.3; // Lower volume than player shots
     audio.src = "laser-1.mp3"; // Reuse the laser sound for now
+    audio.play();
+  }
+
+  // Fire a bomb that explodes on contact with the level boundary
+  private fireBomb(): void {
+    // Create a larger, more distinctive bomb
+    const bombGeometry = new THREE.SphereGeometry(0.25, 12, 12);
+
+    // Create pulsating material with orange-red colors
+    const bombMaterial = new THREE.MeshStandardMaterial({
+      color: 0xff6600, // Orange
+      emissive: 0xff3300, // Red-orange glow
+      emissiveIntensity: 0.7,
+      metalness: 0.3,
+      roughness: 0.4,
+    });
+
+    const bomb = new THREE.Mesh(bombGeometry, bombMaterial);
+
+    // Set bomb position at enemy location
+    bomb.position.set(this.mesh.position.x, this.mesh.position.y, 0);
+
+    // Add a pulsating animation to the bomb
+    const pulse = () => {
+      if (bomb && bomb.scale) {
+        // Pulsate between 0.9 and 1.1 size
+        const s = 1 + 0.1 * Math.sin(Date.now() * 0.01);
+        bomb.scale.set(s, s, s);
+
+        // Continue the animation if the bomb still exists
+        if (bomb.parent) {
+          requestAnimationFrame(pulse);
+        }
+      }
+    };
+    pulse(); // Start the pulsating animation
+
+    // Choose direction - bombs can target in various ways
+    let direction: THREE.Vector2;
+
+    // 70% chance to target player, 30% chance for random direction
+    if (Math.random() < 0.7) {
+      // Target player similar to regular bullets
+      const enemyPos = this.mesh.position;
+
+      // Use actual player position for targeting if available
+      if (this.modeState.playerPosition) {
+        // Calculate vector pointing from enemy to player
+        direction = new THREE.Vector2(
+          this.modeState.playerPosition.x - enemyPos.x,
+          this.modeState.playerPosition.y - enemyPos.y
+        ).normalize();
+      } else {
+        // Fallback if player position isn't available
+        const playerAngle = this.modeState.playerAngle || 0;
+        const playerPos = {
+          x: Math.cos(playerAngle) * 10,
+          y: Math.sin(playerAngle) * 10,
+        };
+
+        direction = new THREE.Vector2(
+          playerPos.x - enemyPos.x,
+          playerPos.y - enemyPos.y
+        ).normalize();
+      }
+
+      // Add a larger random deviation than regular bullets
+      const randomAngle = Math.random() * 0.5 - 0.25; // -0.25 to 0.25 radians
+      const aimAngle = Math.atan2(direction.y, direction.x) + randomAngle;
+      direction = new THREE.Vector2(Math.cos(aimAngle), Math.sin(aimAngle));
+    } else {
+      // Random direction
+      const randomAngle = Math.random() * Math.PI * 2;
+      direction = new THREE.Vector2(
+        Math.cos(randomAngle),
+        Math.sin(randomAngle)
+      );
+    }
+
+    // Bomb speed is slower than regular bullets
+    const bombSpeed = 0.15;
+
+    // Add to scene
+    this.scene.add(bomb);
+
+    // Create new property in modeState if it doesn't exist
+    if (!this.modeState.enemyBullets) {
+      this.modeState.enemyBullets = [];
+    }
+
+    // Add to enemy bullets array with the bomb flag
+    this.modeState.enemyBullets.push({
+      mesh: bomb,
+      direction: direction,
+      speed: bombSpeed,
+      fromEnemy: true,
+      isBomb: true, // Mark as a bomb that will explode on boundary contact
+    });
+
+    // Play a distinctive sound for bomb firing
+    const audio = new Audio();
+    audio.volume = 0.4;
+    audio.src = "laser-1.mp3"; // Ideally would be a different sound
     audio.play();
   }
 
