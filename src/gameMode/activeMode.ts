@@ -221,6 +221,9 @@ export class ActiveMode implements GameMode {
 
       // If player was hit, handle the collision
       if (playerHit) {
+        // Stop current sounds
+        SoundManager.getInstance().stopAllSounds();
+        
         // Decrement lives when player is hit
         this.gameState.lives--;
 
@@ -1226,6 +1229,9 @@ export class ActiveMode implements GameMode {
 
   // Handle when the blood moon reaches the level boundary
   private handleBloodMoonReachedBoundary(): void {
+    // Stop any ongoing sounds
+    SoundManager.getInstance().stopAllSounds();
+    
     // Show a warning message
     const warningMessage = document.createElement("div");
     warningMessage.id = "blood-moon-warning";

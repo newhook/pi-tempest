@@ -14,6 +14,9 @@ export class GameOverMode implements GameMode {
   }
 
   public enter(): void {
+    // Stop any lingering sounds
+    SoundManager.getInstance().stopAllSounds();
+    
     // Display game over UI
     this.showGameOver();
   }

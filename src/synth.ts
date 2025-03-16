@@ -4,6 +4,8 @@
 
 // AudioContext singleton
 let audioContextInstance: AudioContext | null = null;
+// Track active oscillators/sounds to be able to stop them
+let activeSounds: Set<OscillatorNode | AudioBufferSourceNode> = new Set();
 
 // Get or create AudioContext
 function getAudioContext(): AudioContext {
@@ -11,6 +13,27 @@ function getAudioContext(): AudioContext {
     audioContextInstance = new AudioContext();
   }
   return audioContextInstance;
+}
+
+// Add sound to tracking set
+function trackSound(sound: OscillatorNode | AudioBufferSourceNode): void {
+  activeSounds.add(sound);
+  // Remove from tracking when ended
+  sound.onended = () => {
+    activeSounds.delete(sound);
+  };
+}
+
+// Stop all active sounds
+function stopAllSounds(): void {
+  activeSounds.forEach(sound => {
+    try {
+      sound.stop();
+    } catch (e) {
+      // Ignore errors if sound already stopped
+    }
+  });
+  activeSounds.clear();
 }
 
 // Base class for all sound effects
@@ -48,6 +71,9 @@ export class LaserSound extends SoundEffect {
     // Start and stop
     oscillator.start();
     oscillator.stop(this.context.currentTime + 0.1);
+    
+    // Track this sound
+    trackSound(oscillator);
   }
 }
 
@@ -73,6 +99,9 @@ export class EnemyLaserSound extends SoundEffect {
     // Start and stop
     oscillator.start();
     oscillator.stop(this.context.currentTime + 0.15);
+    
+    // Track this sound
+    trackSound(oscillator);
   }
 }
 
@@ -114,6 +143,9 @@ export class ExplosionSound extends SoundEffect {
     // Play the sound
     noise.start();
     noise.stop(this.context.currentTime + noiseLength);
+    
+    // Track this sound
+    trackSound(noise);
   }
 }
 
@@ -169,6 +201,10 @@ export class BigExplosionSound extends SoundEffect {
     oscillator.stop(this.context.currentTime + delay + 0.5);
     noise.start(this.context.currentTime + delay);
     noise.stop(this.context.currentTime + delay + 0.5);
+    
+    // Track these sounds
+    trackSound(oscillator);
+    trackSound(noise);
   }
 }
 
@@ -195,6 +231,9 @@ export class LevelStartSound extends SoundEffect {
       
       oscillator.start(startTime);
       oscillator.stop(startTime + duration);
+      
+      // Track this sound
+      trackSound(oscillator);
     });
   }
 }
@@ -222,6 +261,9 @@ export class PowerUpSound extends SoundEffect {
     
     oscillator.start();
     oscillator.stop(this.context.currentTime + duration);
+    
+    // Track this sound
+    trackSound(oscillator);
   }
 }
 
@@ -257,6 +299,9 @@ export class BloodMoonSound extends SoundEffect {
     // Start and stop
     oscillator.start();
     oscillator.stop(this.context.currentTime + 1.5);
+    
+    // Track this sound
+    trackSound(oscillator);
   }
 }
 
@@ -333,5 +378,9 @@ export class SoundManager {
   
   public isSoundMuted(): boolean {
     return this.isMuted;
+  }
+  
+  public stopAllSounds(): void {
+    stopAllSounds();
   }
 }
