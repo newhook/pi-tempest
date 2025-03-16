@@ -112,8 +112,7 @@ export class Enemy {
         y = Math.sin(this.angle) * this.distanceFromCenter;
         break;
 
-      case "homing": // Type 7: Homing movement
-        // SIMPLE VERSION - direct homing
+      case "homing": // Type 7: Homing movement with erratic behavior
         // Calculate current enemy position
         const enemyPosX = this.mesh.position.x;
         const enemyPosY = this.mesh.position.y;
@@ -142,10 +141,39 @@ export class Enemy {
         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
         while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
         
-        // Very simple turning - fixed rate
-        // Higher turn rate = more aggressive homing
-        const turnSpeed = 1.5;
-        this.angle += angleDiff * delta * turnSpeed;
+        // Base turn rate - distance-based for smoother targeting
+        // As enemy gets closer to player, it turns more smoothly and precisely
+        const distanceFactor = Math.min(0.8, this.distanceFromCenter / levelRadius);
+        const turnRate = 0.8 + (distanceFactor * 0.4); // 0.8-1.2 range
+        
+        // Apply distance-based behavior dampening
+        // Reduce oscillation as enemies get closer to edge (where player is)
+        const proximityDampen = 1 - (this.distanceFromCenter / levelRadius) * 0.8;
+        
+        // 1. Subtle "hunting" oscillation - reduced when close to player
+        const huntingOscillation = Math.sin(this.distanceFromCenter * 2) * 0.02 * proximityDampen;
+        
+        // 2. Very mild course corrections - also reduced when close
+        const courseCorrection = Math.sin(this.distanceFromCenter * 3) * 0.02 * proximityDampen;
+        
+        // 3. Extremely tiny random jitter - just for a touch of life
+        const tinyJitter = (Math.random() - 0.5) * 0.01 * proximityDampen;
+        
+        // Apply basic smooth tracking with minimal irregularities
+        // Strict limit on maximum turn per frame
+        const maxTurnPerFrame = 0.04; // About 2.3 degrees max per frame
+        
+        // Calculate total turn amount with reduced irregularities
+        let totalTurn = (angleDiff * delta * turnRate) + 
+                       huntingOscillation + 
+                       courseCorrection + 
+                       tinyJitter;
+                        
+        // Strictly clamp the turn to prevent pendulum effect
+        if (totalTurn > maxTurnPerFrame) totalTurn = maxTurnPerFrame;
+        if (totalTurn < -maxTurnPerFrame) totalTurn = -maxTurnPerFrame;
+        
+        this.angle += totalTurn;
 
         // Calculate new position
         x = Math.cos(this.angle) * this.distanceFromCenter;
