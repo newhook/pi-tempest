@@ -22,6 +22,20 @@ export class Enemy {
   // Number of spokes in the current level (needed for spoke movement)
   private numSpokes: number = 8;
   private lastFireTime: number = 0; // Track time since last bullet fired
+  // For zigzag tracking
+  private originalAngle?: number;
+  // For zigzag extension line visualization
+  private extensionLine?: THREE.Line;
+  // For zigzag spoke-to-spoke movement
+  private zigzagState?: {
+    currentSpoke: number;
+    targetSpoke: number | null;
+    transitionProgress: number;
+    isExtending: boolean;
+    extensionProgress: number;
+    phase: number;
+    nextTransitionDistance: number;
+  };
   public pathParams?: {
     startAngle: number;
     spiralTightness: number;
@@ -181,7 +195,125 @@ export class Enemy {
         break;
 
       case "zigzag":
-        this.angle += Math.sin(this.distanceFromCenter / 10) * 0.1;
+        // NEW DESIGN: Zigzag between spokes with line-then-zip behavior
+        // We need to track state for this movement type
+        
+        // Initialize special zigzag state if not set yet
+        if (!this.zigzagState) {
+          // Use numSpokes to determine spoke positions
+          this.zigzagState = {
+            // Current spoke index
+            currentSpoke: Math.floor(Math.random() * numSpokes),
+            // Target spoke (where we're moving to)
+            targetSpoke: null,
+            // Progress along the transition (0-1)
+            transitionProgress: 0,
+            // Line "extension" phase (true) or "zip" phase (false)
+            isExtending: true,
+            // Line extension progress (0-1)
+            extensionProgress: 0,
+            // Movement phase (0: along spoke, 1: transitioning between spokes)
+            phase: 0,
+            // Distance when we start next transition 
+            nextTransitionDistance: 1 + Math.random() * 2
+          };
+        }
+        
+        // Get current spoke angle
+        const spokeAngle = (this.zigzagState.currentSpoke / numSpokes) * Math.PI * 2;
+        
+        // If we're in phase 0 (moving along spoke), check if we need to switch to transition
+        if (this.zigzagState.phase === 0) {
+          // Move outward along spoke
+          this.angle = spokeAngle;
+          
+          // If we've reached the transition distance, set up next transition
+          if (this.distanceFromCenter >= this.zigzagState.nextTransitionDistance) {
+            // Switch to transition phase
+            this.zigzagState.phase = 1;
+            
+            // Choose a target spoke (different from current)
+            let nextSpokeOffset;
+            // Random jump distance between 1-3 spokes
+            const jumpDistance = 1 + Math.floor(Math.random() * 3);
+            
+            // 50% chance to go clockwise vs counter-clockwise
+            if (Math.random() > 0.5) {
+              nextSpokeOffset = jumpDistance;
+            } else {
+              nextSpokeOffset = numSpokes - jumpDistance;
+            }
+            
+            // Calculate target spoke index
+            this.zigzagState.targetSpoke = 
+              (this.zigzagState.currentSpoke + nextSpokeOffset) % numSpokes;
+            
+            // Start extension phase
+            this.zigzagState.isExtending = true;
+            this.zigzagState.extensionProgress = 0;
+            this.zigzagState.transitionProgress = 0;
+          }
+        }
+        
+        // Phase 1: Transition between spokes
+        if (this.zigzagState.phase === 1) {
+          // Get target spoke angle
+          const targetSpokeAngle = (this.zigzagState.targetSpoke / numSpokes) * Math.PI * 2;
+          
+          // Phase 1a: Extending line toward target spoke
+          if (this.zigzagState.isExtending) {
+            // Extend line from current spoke toward target spoke
+            this.zigzagState.extensionProgress += delta * 3; // Speed of extension
+            
+            // If extension complete, begin zip phase
+            if (this.zigzagState.extensionProgress >= 1) {
+              this.zigzagState.isExtending = false;
+              this.zigzagState.transitionProgress = 0;
+            }
+            
+            // During extension phase, keep position on current spoke
+            // but render a "line" to the target (handled elsewhere)
+            this.angle = spokeAngle;
+          }
+          // Phase 1b: Zipping along the extended line
+          else {
+            // Zip along line from current to target spoke
+            this.zigzagState.transitionProgress += delta * 8; // Speed of zip movement
+            
+            // If zip complete, transition to target spoke
+            if (this.zigzagState.transitionProgress >= 1) {
+              // Complete transition to new spoke
+              this.zigzagState.currentSpoke = this.zigzagState.targetSpoke;
+              this.zigzagState.targetSpoke = null;
+              
+              // Return to spoke movement phase
+              this.zigzagState.phase = 0;
+              
+              // Set next transition distance
+              this.zigzagState.nextTransitionDistance = 
+                this.distanceFromCenter + 1 + Math.random() * 2;
+              
+              // Set to target spoke angle
+              this.angle = targetSpokeAngle;
+            } 
+            // During zip movement, interpolate between spoke angles
+            else {
+              // Easing function for smooth acceleration/deceleration 
+              const t = this.zigzagState.transitionProgress;
+              const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+              
+              // Interpolate between spoke angles for smooth movement
+              const angleDiff = targetSpokeAngle - spokeAngle;
+              // Handle wrapping around 2π
+              const wrappedDiff = 
+                ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+              
+              this.angle = spokeAngle + wrappedDiff * eased;
+            }
+          }
+        }
+        
+        // Calculate position
         x = Math.cos(this.angle) * this.distanceFromCenter;
         y = Math.sin(this.angle) * this.distanceFromCenter;
         break;
@@ -512,6 +644,20 @@ export class Enemy {
     // Scale enemy as it moves outward for better visibility
     const scale = 0.5 + this.distanceFromCenter / (levelRadius * 2);
     this.mesh.scale.set(scale, scale, scale);
+    
+    // Special visualization for zigzag enemies in extension phase
+    if (this.movementStyle === "zigzag" && 
+        this.zigzagState && 
+        this.zigzagState.phase === 1 &&
+        this.zigzagState.isExtending) {
+      
+      // Create or update the extension line visualization
+      this.createExtensionLine(levelRadius);
+    } else if (this.extensionLine) {
+      // Remove extension line when not in extension phase
+      this.scene.remove(this.extensionLine);
+      this.extensionLine = undefined;
+    }
 
     // For enemy type 8, fire bullets at the player
     if (this.type === 8) {
@@ -780,6 +926,73 @@ export class Enemy {
     }
   }
 
+  // Create the extension line for zigzag enemies during the extension phase
+  private createExtensionLine(levelRadius: number): void {
+    if (!this.zigzagState || !this.zigzagState.targetSpoke) return;
+    
+    // Calculate current and target positions
+    const currentSpokeAngle = (this.zigzagState.currentSpoke / this.numSpokes) * Math.PI * 2;
+    const targetSpokeAngle = (this.zigzagState.targetSpoke / this.numSpokes) * Math.PI * 2;
+    
+    // Get positions for line endpoints
+    const startPos = new THREE.Vector3(
+      Math.cos(currentSpokeAngle) * this.distanceFromCenter,
+      Math.sin(currentSpokeAngle) * this.distanceFromCenter,
+      0
+    );
+    
+    // Target position at the same distance from center but on target spoke
+    const endDistance = this.distanceFromCenter * this.zigzagState.extensionProgress;
+    const endPos = new THREE.Vector3(
+      Math.cos(targetSpokeAngle) * endDistance,
+      Math.sin(targetSpokeAngle) * endDistance,
+      0
+    );
+    
+    // Create or update line
+    if (!this.extensionLine) {
+      // Create line geometry
+      const lineGeometry = new THREE.BufferGeometry();
+      const linePositions = new Float32Array([
+        startPos.x, startPos.y, startPos.z,
+        endPos.x, endPos.y, endPos.z
+      ]);
+      
+      lineGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(linePositions, 3)
+      );
+      
+      // Create line material - color matches enemy
+      const enemyMaterial = this.mesh.material as THREE.MeshStandardMaterial;
+      const lineMaterial = new THREE.LineBasicMaterial({ 
+        color: enemyMaterial.color,
+        linewidth: 2,
+        opacity: 0.7,
+        transparent: true
+      });
+      
+      // Create line and add to scene
+      this.extensionLine = new THREE.Line(lineGeometry, lineMaterial);
+      this.scene.add(this.extensionLine);
+    } else {
+      // Update existing line
+      const positions = this.extensionLine.geometry.attributes.position.array as Float32Array;
+      
+      // Update start position
+      positions[0] = startPos.x;
+      positions[1] = startPos.y;
+      positions[2] = startPos.z;
+      
+      // Update end position
+      positions[3] = endPos.x;
+      positions[4] = endPos.y;
+      positions[5] = endPos.z;
+      
+      this.extensionLine.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+  
   // Create explosion particles
   private createExplosion(position: THREE.Vector3, color: THREE.Color): void {
     const particleCount = 50;

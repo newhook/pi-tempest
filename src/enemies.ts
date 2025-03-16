@@ -46,7 +46,7 @@ export class EnemyManager {
 
     // Select a random enemy type from the available range
     // const enemyType = Math.floor(Math.random() * (maxEnemyType + 1));
-    let enemyType = 7;
+    let enemyType = 3;
 
     // Create enemy geometry based on the enemy type
     const enemyGeometry = Enemy.getGeometry(enemyType);
@@ -76,6 +76,7 @@ export class EnemyManager {
     const levelType = this.getLevelType(this.gameState.currentLevel);
 
     // Generate a random angle for initial positioning
+    // Add random offset to ensure enemies don't all follow the same path
     angle = Math.random() * Math.PI * 2;
 
     // Assign movement style based on enemy type
@@ -222,13 +223,15 @@ export class EnemyManager {
           "bounce",
           "erratic",
           "homing",
+          "zigzag", // Explicitly add zigzag to ensure it gets proper path parameters
         ].includes(movementStyle)
       ) {
+        // Generate more randomized path parameters to ensure variety
         enemy.pathParams = {
           startAngle: angle,
-          spiralTightness: 0.1 + Math.random() * 0.2,
-          waveAmplitude: 0.5 + Math.random() * 1.0,
-          waveFrequency: 2 + Math.random() * 3,
+          spiralTightness: 0.1 + Math.random() * 0.3,
+          waveAmplitude: 0.5 + Math.random() * 1.2,
+          waveFrequency: 2 + Math.random() * 4,
           pathOffset: Math.random() * Math.PI * 2,
         };
       }
