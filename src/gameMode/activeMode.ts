@@ -10,6 +10,8 @@ import { BloodMoon } from "../bloodMoon";
 import { Level, LevelType } from "../levels";
 import { SoundManager } from "../synth";
 
+const maxLevelTime = 10;
+
 export class ActiveMode implements GameMode {
   private sceneSetup: SceneSetup;
   private gameState: GameState;
@@ -83,13 +85,13 @@ export class ActiveMode implements GameMode {
     this.bloodMoon.enter();
 
     // Immediately start the blood moon growing (this will be invisible at first)
-    this.bloodMoon.startGrowing(60);
+    this.bloodMoon.startGrowing(maxLevelTime);
 
-    // Show the initial countdown time of 60 seconds
-    updateCountdownTimer(60);
+    // Show the initial countdown time of levelTime seconds
+    updateCountdownTimer(maxLevelTime);
 
     // Initialize or update the lives display
-    import("../ui").then((ui) => ui.updateLives(this.gameState));
+    updateLives(this.gameState);
 
     // Start background music
     SoundManager.getInstance().startBackgroundMusic();
@@ -145,37 +147,18 @@ export class ActiveMode implements GameMode {
       SoundManager.getInstance().updateMusicWithTimer(remainingSeconds);
 
       // Start beeping countdown at 10 seconds remaining
-      if (remainingSeconds <= 10 && remainingSeconds > 0 && !this.countdownActive && !this.modeState.ghostMode) {
+      if (
+        remainingSeconds <= 10 &&
+        remainingSeconds > 0 &&
+        !this.countdownActive
+      ) {
         this.countdownActive = true;
         this.countdownSound = SoundManager.getInstance().playCountdown();
       }
-      
-      // Stop countdown if we go back above 10 seconds (e.g., from ghost mode extension)
-      if (remainingSeconds > 10 && this.countdownActive) {
-        this.stopCountdown();
-      }
 
       // Check if time has run out
-      if (remainingSeconds <= 0) {
+      if (this.bloodMoon.isFullyGrown()) {
         // Force game over if time is completely out, regardless of ghost mode status
-        this.handleBloodMoonReachedBoundary();
-        return;
-      }
-    }
-
-    // Check if the blood moon has reached the level boundary (backup check)
-    if (!this.transitionInProgress) {
-      const moonProgress = this.bloodMoon.getGrowthProgress();
-      // Force the game over sequence if progress is 100%, even in ghost mode
-      // This ensures the game can't get stuck in a state where the moon is fully grown but nothing happens
-      if (moonProgress >= 1.0) {
-        // Moon has completely reached the boundary, force game over regardless of ghost mode
-        this.handleBloodMoonReachedBoundary();
-        return;
-      }
-      // Normal boundary check (respects ghost mode)
-      else if (!this.modeState.ghostMode && moonProgress >= 0.99) {
-        // Moon has reached the boundary, end the game if the player hasn't cleared the level
         this.handleBloodMoonReachedBoundary();
         return;
       }
@@ -218,7 +201,8 @@ export class ActiveMode implements GameMode {
     ) {
       this.enemyManager.createEnemy(this.level);
 
-      const nextTime = 0.5 + 0.5 * (this.bloodMoon.getRemainingTime() / 60);
+      const nextTime =
+        0.5 + 0.5 * (this.bloodMoon.getRemainingTime() / maxLevelTime);
       this.nextEnemyTime = elapsedTime + 0.5 + Math.random() * nextTime;
     }
 
@@ -325,7 +309,7 @@ export class ActiveMode implements GameMode {
 
     // Stop the countdown sound if active
     this.stopCountdown();
-    
+
     // Stop background music
     SoundManager.getInstance().stopBackgroundMusic();
 
@@ -341,7 +325,7 @@ export class ActiveMode implements GameMode {
       this.shootingInterval = null;
     }
   }
-  
+
   // Stop the countdown beeping
   private stopCountdown(): void {
     if (this.countdownActive && this.countdownSound) {
@@ -389,10 +373,10 @@ export class ActiveMode implements GameMode {
   public async levelUp(): Promise<void> {
     if (this.transitionInProgress) return;
     this.transitionInProgress = true;
-    
+
     // Stop countdown beeping if active
     this.stopCountdown();
-    
+
     // Stop background music when level completes
     SoundManager.getInstance().stopBackgroundMusic();
 
@@ -455,44 +439,16 @@ export class ActiveMode implements GameMode {
     this.bloodMoon.setLevelRadius(this.levelRadius);
 
     // Start the Blood Moon growing for the new level
-    this.bloodMoon.startGrowing(60);
+    this.bloodMoon.startGrowing(maxLevelTime);
 
     // Reset the countdown timer for the new level
-    updateCountdownTimer(60);
+    updateCountdownTimer(maxLevelTime);
 
     // Start background music for the new level
     SoundManager.getInstance().startBackgroundMusic();
 
-    // No level start messages on level transitions
-
-    // Give a brief period of invulnerability after level change
-    this.modeState.ghostMode = true;
-    this.updateGhostModeDisplay(true);
-
-    // Make the player semi-transparent to indicate invulnerability
-    this.player.traverse((object) => {
-      if (object instanceof THREE.Mesh) {
-        object.material.opacity = 0.5;
-        object.material.transparent = true;
-      }
-    });
-
     // Resume normal gameplay
     this.transitionInProgress = false;
-
-    // End invulnerability after a brief period
-    setTimeout(() => {
-      this.modeState.ghostMode = false;
-      this.updateGhostModeDisplay(false);
-
-      // Restore player opacity
-      this.player.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
-          object.material.opacity = 1.0;
-          object.material.transparent = false;
-        }
-      });
-    }, 2000);
   }
 
   public toggleGhostMode(): void {
@@ -1289,22 +1245,9 @@ export class ActiveMode implements GameMode {
   private handleBloodMoonReachedBoundary(): void {
     // Stop sound effects but keep music playing until game over
     SoundManager.getInstance().stopSoundEffects();
-    
+
     // Make sure countdown is explicitly stopped
     this.stopCountdown();
-    
-    // Ensure ghost mode is disabled to prevent getting stuck
-    if (this.modeState.ghostMode) {
-      this.modeState.ghostMode = false;
-      
-      // Restore player opacity
-      this.player.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
-          object.material.opacity = 1.0;
-          object.material.transparent = false;
-        }
-      });
-    }
 
     // Show a warning message
     const warningMessage = document.createElement("div");
