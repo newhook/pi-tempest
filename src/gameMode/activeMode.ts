@@ -24,6 +24,8 @@ export class ActiveMode implements GameMode {
     left: false,
     right: false,
   };
+  private isMouseDown: boolean = false;
+  private shootingInterval: number | null = null;
   private keyMovementInterval: number | null = null;
 
   // Active mode specific state
@@ -83,6 +85,11 @@ export class ActiveMode implements GameMode {
     
     // Initialize or update the lives display
     import("../ui").then(ui => ui.updateLives(this.gameState));
+
+    // Display level start messages only on the first level
+    if (this.gameState.currentLevel === 1) {
+      this.showLevelStartText();
+    }
 
     // Reset enemy spawn timer to start spawning enemies
     this.nextEnemyTime = this.clock.getElapsedTime();
@@ -255,10 +262,16 @@ export class ActiveMode implements GameMode {
 
     this.bloodMoon.exit();
 
-    // Cancel any ongoing key movement interval
+    // Cancel any ongoing intervals
     if (this.keyMovementInterval) {
       clearInterval(this.keyMovementInterval);
       this.keyMovementInterval = null;
+    }
+    
+    // Cancel any ongoing shooting interval
+    if (this.shootingInterval) {
+      clearInterval(this.shootingInterval);
+      this.shootingInterval = null;
     }
   }
 
@@ -360,6 +373,8 @@ export class ActiveMode implements GameMode {
 
     // Reset the countdown timer for the new level
     updateCountdownTimer(60);
+    
+    // No level start messages on level transitions
 
     // Give a brief period of invulnerability after level change
     this.modeState.ghostMode = true;
@@ -806,6 +821,90 @@ export class ActiveMode implements GameMode {
       }
     }, 3000);
   }
+  
+  private showLevelStartText(): void {
+    // First message: "The dark moon is rising..."
+    const darkMoonText = document.createElement("div");
+    darkMoonText.textContent = "The dark moon is rising...";
+    darkMoonText.style.position = "absolute";
+    darkMoonText.style.top = "10%";
+    darkMoonText.style.left = "50%";
+    darkMoonText.style.transform = "translateX(-50%)";
+    darkMoonText.style.color = "#FF0000";
+    darkMoonText.style.fontFamily = "Arial, sans-serif";
+    darkMoonText.style.fontSize = "36px";
+    darkMoonText.style.fontWeight = "bold";
+    darkMoonText.style.textShadow = "0 0 10px #FF0000";
+    darkMoonText.style.opacity = "0";
+    darkMoonText.style.transition = "opacity 1s ease-in-out";
+    darkMoonText.id = "dark-moon-text";
+    
+    document.body.appendChild(darkMoonText);
+    
+    // Fade in the first message
+    setTimeout(() => {
+      const textElement = document.getElementById("dark-moon-text");
+      if (textElement) {
+        textElement.style.opacity = "1";
+      }
+    }, 100);
+    
+    // Remove the first message and show the second one after a delay
+    setTimeout(() => {
+      const textElement = document.getElementById("dark-moon-text");
+      if (textElement) {
+        textElement.style.opacity = "0";
+        
+        // Remove after fade out
+        setTimeout(() => {
+          if (textElement.parentNode) {
+            document.body.removeChild(textElement);
+          }
+          
+          // Show second message: "Hurry! Clear the level"
+          const hurryText = document.createElement("div");
+          hurryText.textContent = "Hurry! Clear the level";
+          hurryText.style.position = "absolute";
+          hurryText.style.top = "10%";
+          hurryText.style.left = "50%";
+          hurryText.style.transform = "translateX(-50%)";
+          hurryText.style.color = "#FF0000";
+          hurryText.style.fontFamily = "Arial, sans-serif";
+          hurryText.style.fontSize = "36px";
+          hurryText.style.fontWeight = "bold";
+          hurryText.style.textShadow = "0 0 10px #FF0000";
+          hurryText.style.opacity = "0";
+          hurryText.style.transition = "opacity 1s ease-in-out";
+          hurryText.id = "hurry-text";
+          
+          document.body.appendChild(hurryText);
+          
+          // Fade in the second message
+          setTimeout(() => {
+            const hurryElement = document.getElementById("hurry-text");
+            if (hurryElement) {
+              hurryElement.style.opacity = "1";
+            }
+          }, 100);
+          
+          // Remove the second message after a delay
+          setTimeout(() => {
+            const hurryElement = document.getElementById("hurry-text");
+            if (hurryElement) {
+              hurryElement.style.opacity = "0";
+              
+              // Remove after fade out
+              setTimeout(() => {
+                if (hurryElement.parentNode) {
+                  document.body.removeChild(hurryElement);
+                }
+              }, 1000);
+            }
+          }, 2000);
+        }, 1000);
+      }
+    }, 2000);
+  }
 
   private destroyAllEnemies(): void {
     // Remove all enemies if they exist
@@ -1192,9 +1291,62 @@ export class ActiveMode implements GameMode {
     // Update player angle
     this.updatePlayerAngle(mouseAngle);
   }
+  
+  // Add method to handle mouseup event
+  public handleMouseUp(event: MouseEvent): void {
+    // Only handle left mouse button release (button 0)
+    if (event.button === 0) {
+      this.isMouseDown = false;
+      
+      // Stop continuous shooting
+      if (this.shootingInterval) {
+        clearInterval(this.shootingInterval);
+        this.shootingInterval = null;
+      }
+    }
+  }
 
+  public handleMouseDown(event: MouseEvent): void {
+    // Only handle left mouse button press (button 0)
+    if (event.button === 0) {
+      this.shoot();
+      
+      // Set the mouse down flag
+      this.isMouseDown = true;
+      
+      // Start continuous shooting
+      this.startContinuousShooting();
+    }
+  }
+  
   public handleClick(event: MouseEvent): void {
-    this.shoot();
+    // We're now handling the initial shot in mousedown
+    // This is still kept for compatibility but doesn't duplicate the shot
+  }
+  
+  private startContinuousShooting(): void {
+    // Clear any existing interval first
+    if (this.shootingInterval) {
+      clearInterval(this.shootingInterval);
+      this.shootingInterval = null;
+    }
+    
+    // Create a new interval for continuous shooting
+    // Start the interval with a slight delay to avoid double-firing
+    // since we already fired one shot on the initial mouse down
+    setTimeout(() => {
+      this.shootingInterval = window.setInterval(() => {
+        if (this.isMouseDown && !this.transitionInProgress) {
+          this.shoot();
+        } else if (!this.isMouseDown) {
+          // Stop the interval if mouse is no longer down
+          if (this.shootingInterval) {
+            clearInterval(this.shootingInterval);
+            this.shootingInterval = null;
+          }
+        }
+      }, 200); // Shoot every 200ms (adjust for desired fire rate)
+    }, 50);
   }
 
   public handleTouchMove(event: TouchEvent): void {
@@ -1220,5 +1372,22 @@ export class ActiveMode implements GameMode {
 
   public handleTouchStart(event: TouchEvent): void {
     this.shoot();
+    
+    // Set the mouse down flag to enable continuous shooting
+    this.isMouseDown = true;
+    
+    // Start continuous shooting, same as with mouse
+    this.startContinuousShooting();
+  }
+  
+  public handleTouchEnd(event: TouchEvent): void {
+    // Stop continuous shooting
+    this.isMouseDown = false;
+    
+    // Clear any shooting interval
+    if (this.shootingInterval) {
+      clearInterval(this.shootingInterval);
+      this.shootingInterval = null;
+    }
   }
 }

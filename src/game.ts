@@ -78,9 +78,23 @@ export class Game {
       this.currentMode.handleMouseMove(event);
     });
 
+    document.addEventListener("mousedown", (event: MouseEvent) => {
+      // Forward the event to the current mode
+      if (this.currentMode.handleMouseDown) {
+        this.currentMode.handleMouseDown(event);
+      }
+    });
+
     document.addEventListener("click", (event: MouseEvent) => {
       // Forward the event to the current mode
       this.currentMode.handleClick(event);
+    });
+    
+    document.addEventListener("mouseup", (event: MouseEvent) => {
+      // Forward the event to the current mode
+      if (this.currentMode.handleMouseUp) {
+        this.currentMode.handleMouseUp(event);
+      }
     });
 
     // Touch controls
@@ -96,6 +110,13 @@ export class Game {
     document.addEventListener("touchstart", (event: TouchEvent) => {
       // Forward the event to the current mode
       this.currentMode.handleTouchStart(event);
+    });
+    
+    document.addEventListener("touchend", (event: TouchEvent) => {
+      // Forward the event to the current mode
+      if (this.currentMode.handleTouchEnd) {
+        this.currentMode.handleTouchEnd(event);
+      }
     });
   }
 

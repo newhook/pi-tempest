@@ -267,6 +267,18 @@ export class MarqueeMode implements GameMode {
     // No specific touch start handling needed for marquee mode
     // Start button has its own click handler
   }
+  
+  public handleMouseDown(event: MouseEvent): void {
+    // No specific mouse down handling needed for marquee mode
+  }
+  
+  public handleMouseUp(event: MouseEvent): void {
+    // No specific mouse up handling needed for marquee mode
+  }
+  
+  public handleTouchEnd(event: TouchEvent): void {
+    // No specific touch end handling needed for marquee mode
+  }
 
   private startGame(): void {
     // Transition to active game mode

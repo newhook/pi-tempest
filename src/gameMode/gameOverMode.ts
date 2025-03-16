@@ -67,6 +67,18 @@ export class GameOverMode implements GameMode {
     // No touch start handling needed
     // Retry button has its own click handler
   }
+  
+  public handleMouseDown(event: MouseEvent): void {
+    // No specific mouse down handling needed for game over mode
+  }
+  
+  public handleMouseUp(event: MouseEvent): void {
+    // No specific mouse up handling needed for game over mode
+  }
+  
+  public handleTouchEnd(event: TouchEvent): void {
+    // No specific touch end handling needed for game over mode
+  }
 
   private restartGame(): void {
     // Transition back to marquee mode
