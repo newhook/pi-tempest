@@ -350,6 +350,71 @@ export class PowerUpSound extends SoundEffect {
   }
 }
 
+// Countdown timer sound (beeping that accelerates)
+export class CountdownSound extends SoundEffect {
+  private intervalId: number | null = null;
+  private beepRate: number = 1000; // Start at 1 beep per second
+  private minRate: number = 100; // Fastest beeping rate in ms
+  
+  play(): void {
+    this.beep(); // Initial beep
+    
+    // Set up recurring beeps that accelerate
+    this.intervalId = window.setInterval(() => {
+      this.beep();
+      
+      // Accelerate the beeping (decrease interval time)
+      if (this.beepRate > this.minRate) {
+        this.beepRate = Math.max(this.minRate, this.beepRate * 0.9);
+        
+        // Clear and restart interval with new timing
+        if (this.intervalId !== null) {
+          window.clearInterval(this.intervalId);
+          this.intervalId = window.setInterval(() => {
+            this.beep();
+          }, this.beepRate);
+        }
+      }
+    }, this.beepRate);
+  }
+  
+  private beep(): void {
+    // Create a short beep sound
+    const oscillator = this.context.createOscillator();
+    const gain = this.context.createGain();
+    
+    // Connect nodes
+    oscillator.connect(gain);
+    gain.connect(this.context.destination);
+    
+    // Configure oscillator for alarm-like sound
+    oscillator.type = 'square';
+    oscillator.frequency.value = 880; // A5 - high pitched beep
+    
+    // Short beep envelope
+    const beepDuration = 0.08;
+    gain.gain.setValueAtTime(0.0, this.context.currentTime);
+    gain.gain.linearRampToValueAtTime(0.3, this.context.currentTime + 0.01);
+    gain.gain.setValueAtTime(0.3, this.context.currentTime + beepDuration - 0.02);
+    gain.gain.linearRampToValueAtTime(0.0, this.context.currentTime + beepDuration);
+    
+    // Start and stop
+    oscillator.start(this.context.currentTime);
+    oscillator.stop(this.context.currentTime + beepDuration);
+    
+    // Track this sound
+    trackSound(oscillator);
+  }
+  
+  stop(): void {
+    // Clean up interval if it exists
+    if (this.intervalId !== null) {
+      window.clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+}
+
 // Ship flying sound
 export class ShipFlyingSound extends SoundEffect {
   private stopTime: number = 0;
@@ -544,6 +609,16 @@ export class SoundManager {
       return flyingSound;
     }
     return new ShipFlyingSound(); // Return dummy instance if muted
+  }
+  
+  // For final countdown timer
+  public playCountdown(): CountdownSound {
+    if (!this.isMuted) {
+      const countdownSound = new CountdownSound();
+      countdownSound.play();
+      return countdownSound;
+    }
+    return new CountdownSound(); // Return dummy instance if muted
   }
   
   public mute(): void {

@@ -30,6 +30,8 @@ export class ActiveMode implements GameMode {
   private keyMovementInterval: number | null = null;
   private piLevelRotationDirection: number = 1; // 1 for clockwise, -1 for counter-clockwise
   private nextDirectionChangeTime: number = 0;
+  private countdownSound: any = null; // Reference to countdown beeping sound
+  private countdownActive: boolean = false; // Flag to track if countdown is active
 
   // Active mode specific state
   private modeState: ActiveModeState = {
@@ -135,6 +137,17 @@ export class ActiveMode implements GameMode {
     if (!this.transitionInProgress) {
       const remainingSeconds = this.bloodMoon.getRemainingTime();
       updateCountdownTimer(remainingSeconds);
+
+      // Start beeping countdown at 10 seconds remaining
+      if (remainingSeconds <= 10 && remainingSeconds > 0 && !this.countdownActive && !this.modeState.ghostMode) {
+        this.countdownActive = true;
+        this.countdownSound = SoundManager.getInstance().playCountdown();
+      }
+      
+      // Stop countdown if we go back above 10 seconds (e.g., from ghost mode extension)
+      if (remainingSeconds > 10 && this.countdownActive) {
+        this.stopCountdown();
+      }
 
       // Check if time has run out (and not in ghost mode)
       if (remainingSeconds <= 0 && !this.modeState.ghostMode) {
@@ -295,6 +308,9 @@ export class ActiveMode implements GameMode {
 
     this.bloodMoon.exit();
 
+    // Stop the countdown sound if active
+    this.stopCountdown();
+
     // Cancel any ongoing intervals
     if (this.keyMovementInterval) {
       clearInterval(this.keyMovementInterval);
@@ -305,6 +321,15 @@ export class ActiveMode implements GameMode {
     if (this.shootingInterval) {
       clearInterval(this.shootingInterval);
       this.shootingInterval = null;
+    }
+  }
+  
+  // Stop the countdown beeping
+  private stopCountdown(): void {
+    if (this.countdownActive && this.countdownSound) {
+      this.countdownSound.stop();
+      this.countdownSound = null;
+      this.countdownActive = false;
     }
   }
 
@@ -346,6 +371,9 @@ export class ActiveMode implements GameMode {
   public async levelUp(): Promise<void> {
     if (this.transitionInProgress) return;
     this.transitionInProgress = true;
+    
+    // Stop countdown beeping if active
+    this.stopCountdown();
 
     // Show level completed text
     this.showLevelCompletedText();
@@ -1237,6 +1265,9 @@ export class ActiveMode implements GameMode {
   private handleBloodMoonReachedBoundary(): void {
     // Stop any ongoing sounds
     SoundManager.getInstance().stopAllSounds();
+    
+    // Make sure countdown is explicitly stopped
+    this.stopCountdown();
 
     // Show a warning message
     const warningMessage = document.createElement("div");
