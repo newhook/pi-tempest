@@ -356,7 +356,7 @@ export class EnemyManager {
           this.createBoundaryExplosion(enemy, level);
         }
 
-        this.gameState.score -= enemy.getPoints();
+        this.gameState.score -= Math.floor(enemy.getPoints() / 2);
         updateScore(this.gameState);
 
         // Remove the enemy
