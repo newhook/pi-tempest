@@ -813,26 +813,158 @@ export class StarMovementController extends BaseMovementController {
   }
 }
 
-// Erratic movement
+// Erratic movement - moves chaotically, periodically stops and spawns enemies
 export class ErraticMovementController extends BaseMovementController {
+  private lastSpawnTime: number = 0;
+  private isMoving: boolean = true;
+  private pauseTime: number = 0;
+  private pauseDuration: number = 1.0; // 1 second pause when spawning
+  private timeBetweenSpawns: number = 5.0; // Spawn every 5 seconds
+  private spokePosition: SpokePosition;
+  private elapsedTime: number = 0;
+  
   constructor(enemy: Enemy) {
     super(enemy);
+    
+    // Get the actual spoke position data for more controlled movement
+    const spokePositions = enemy.level.getSpokePositions();
+    
+    // Randomly select a spoke to generally follow (though will deviate erratically)
+    const spokeCount = enemy.level.getSpokeCount();
+    const randomSpokeIndex = Math.floor(Math.random() * spokeCount);
+    
+    // Set the spoke position
+    this.spokePosition = spokePositions[randomSpokeIndex % spokePositions.length];
+    
+    // Start with random pause timing so not all chaotic enemies spawn at once
+    this.lastSpawnTime = -Math.random() * 3.0;
   }
 
   update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
-    // Very erratic zig-zag with random direction changes
-    this.angle =
-      this.angle +
-      (Math.sin(this.enemy.distanceFromCenter * 0.5) +
-        Math.cos(this.enemy.distanceFromCenter * 0.3)) *
-        0.2 +
-      (Math.random() - 0.5) * 0.1;
-
-    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
-
+    this.elapsedTime += delta;
+    
+    // Check if it's time to pause and spawn
+    if (this.isMoving && this.elapsedTime - this.lastSpawnTime > this.timeBetweenSpawns) {
+      // Stop moving and start pause
+      this.isMoving = false;
+      this.pauseTime = this.elapsedTime;
+      
+      // Spawn smaller enemies
+      this.spawnSmallEnemies();
+      
+      // Make the enemy "flash" by modifying its material
+      this.flashEnemy();
+    }
+    
+    // Check if pause time is over
+    if (!this.isMoving && this.elapsedTime - this.pauseTime > this.pauseDuration) {
+      this.isMoving = true;
+      this.lastSpawnTime = this.elapsedTime;
+    }
+    
+    let x, y;
+    
+    if (this.isMoving) {
+      // Erratic movement when active - combine random movement with slight spoke following
+      const randomFactor = 0.1; // How much randomness to add
+      const spokeFactor = 0.9; // How much to follow the general spoke direction
+      
+      // Add some erratic angle changes
+      this.angle += 
+        (Math.sin(this.enemy.distanceFromCenter * 0.5) +
+         Math.cos(this.enemy.distanceFromCenter * 0.3)) * 0.1 +
+        (Math.random() - 0.5) * 0.08;
+      
+      // Calculate position based on updated angle
+      const randomX = Math.cos(this.angle) * this.enemy.distanceFromCenter;
+      const randomY = Math.sin(this.angle) * this.enemy.distanceFromCenter;
+      
+      // Calculate position on spoke for partial guidance
+      const t = this.enemy.distanceFromCenter / levelRadius;
+      const spokeX = this.spokePosition.innerX + (this.spokePosition.outerX - this.spokePosition.innerX) * t;
+      const spokeY = this.spokePosition.innerY + (this.spokePosition.outerY - this.spokePosition.innerY) * t;
+      
+      // Blend random movement with spoke-following for semi-guided chaos
+      x = randomX * randomFactor + spokeX * spokeFactor;
+      y = randomY * randomFactor + spokeY * spokeFactor;
+    } else {
+      // When paused, stay in place
+      x = this.enemy.mesh.position.x;
+      y = this.enemy.mesh.position.y;
+    }
+    
     return { x, y };
+  }
+  
+  // Spawn 4 small type 10 enemies
+  private spawnSmallEnemies(): void {
+    // Create a sphere geometry for the small enemies
+    const geometry = new THREE.SphereGeometry(0.2, 8, 8);
+    
+    // Create a glowing material with pulsating effect
+    const hue = 0.3 + Math.random() * 0.1; // green to yellowish-green
+    const color = new THREE.Color().setHSL(hue, 1, 0.5);
+    
+    // Get enemy's current position
+    const position = this.enemy.mesh.position.clone();
+    
+    // Spawn 4 enemies in cardinal directions
+    for (let i = 0; i < 4; i++) {
+      const material = new THREE.MeshStandardMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.7,
+        flatShading: true,
+      });
+      
+      const mesh = new THREE.Mesh(geometry, material);
+      
+      // Position slightly offset from parent enemy
+      const angle = (i / 4) * Math.PI * 2;
+      const offsetDistance = 0.5; // Distance from parent enemy
+      mesh.position.set(
+        position.x + Math.cos(angle) * offsetDistance,
+        position.y + Math.sin(angle) * offsetDistance,
+        position.z
+      );
+      
+      // Create the enemy object with proper parameters order matching the Enemy constructor
+      const smallEnemy = new Enemy(
+        this.enemy.level,
+        mesh,
+        10, // Type 10 for small enemies
+        this.enemy.scene,
+        this.enemy.gameState,
+        this.enemy.modeState
+      );
+      
+      // Add to scene and enemy list
+      this.enemy.scene.add(mesh);
+      this.enemy.modeState.enemies.push(smallEnemy);
+    }
+  }
+  
+  // Make the enemy flash when spawning
+  private flashEnemy(): void {
+    const enemyMaterial = this.enemy.mesh.material as THREE.MeshStandardMaterial;
+    const originalColor = enemyMaterial.color.clone();
+    const originalEmissive = enemyMaterial.emissive.clone();
+    const originalIntensity = enemyMaterial.emissiveIntensity;
+    
+    // Flash white
+    enemyMaterial.color.set(0xffffff);
+    enemyMaterial.emissive.set(0xffffff);
+    enemyMaterial.emissiveIntensity = 1.0;
+    
+    // Reset after flash duration
+    setTimeout(() => {
+      if (this.enemy && this.enemy.mesh) {
+        enemyMaterial.color.copy(originalColor);
+        enemyMaterial.emissive.copy(originalEmissive);
+        enemyMaterial.emissiveIntensity = originalIntensity;
+      }
+    }, this.pauseDuration * 800); // Flash for 80% of pause duration
   }
 }
 
