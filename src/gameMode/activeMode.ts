@@ -35,6 +35,7 @@ export class ActiveMode implements GameMode {
     enemies: [],
     bullets: [],
     enemyBullets: [],
+    explosions: [], // Track active explosions
     ghostMode: false,
     spawnEnemies: true, // Enemies spawn by default
   };
@@ -130,13 +131,14 @@ export class ActiveMode implements GameMode {
     // Check for enemy-bullet collisions
     this.checkBulletCollisions();
 
-    // Check for player-enemy or if player is hit by enemy bullets (only if ghost mode is not active, and not
+    // Check for player-enemy or if player is hit by enemy bullets or explosions (only if ghost mode is not active, and not
     // in transition)
     if (
       !this.modeState.ghostMode &&
       !this.transitionInProgress &&
       (this.enemyManager.checkPlayerCollision(this.player) ||
-        this.checkPlayerHitByEnemyBullets())
+        this.checkPlayerHitByEnemyBullets() ||
+        this.checkPlayerHitByExplosion())
     ) {
       document.dispatchEvent(
         new CustomEvent("gameStatusChanged", {
@@ -597,6 +599,37 @@ export class ActiveMode implements GameMode {
       }
     }
 
+    return false; // No collision detected
+  }
+  
+  // Check if player is hit by any active explosions
+  private checkPlayerHitByExplosion(): boolean {
+    // If no explosions are active, return quickly
+    if (!this.modeState.explosions || this.modeState.explosions.length === 0) {
+      return false;
+    }
+    
+    // Get player position
+    const playerPos = this.player.position;
+    const playerRadius = this.modeState.playerSize * 0.8; // Same collision radius as used for enemies
+    
+    // Check each active explosion for collision with player
+    for (const explosion of this.modeState.explosions) {
+      // Only check if explosion has a non-zero radius (is active)
+      if (explosion.radius <= 0) continue;
+      
+      // Calculate distance between explosion center and player
+      const dx = playerPos.x - explosion.position.x;
+      const dy = playerPos.y - explosion.position.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Check for collision with explosion radius
+      if (distance < playerRadius + explosion.radius) {
+        // Player is hit by explosion!
+        return true;
+      }
+    }
+    
     return false; // No collision detected
   }
 

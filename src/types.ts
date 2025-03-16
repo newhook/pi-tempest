@@ -20,6 +20,7 @@ export interface ActiveModeState {
   enemies: Enemy[];
   bullets: Bullet[];
   enemyBullets: Bullet[]; // Bullets fired by enemies
+  explosions: Explosion[]; // Track active explosions for collision detection
   ghostMode: boolean;
   spawnEnemies: boolean; // Toggle for enabling/disabling enemy spawning
   playerPosition?: { x: number; y: number }; // Added for enemy targeting
@@ -43,4 +44,14 @@ export interface MovementController {
 
   // Clean up any resources when the enemy is destroyed
   cleanup?(scene: THREE.Scene): void;
+}
+
+// Interface for explosions
+export interface Explosion {
+  id: string;
+  position: THREE.Vector3;
+  radius: number;
+  maxRadius: number;
+  startTime: number;
+  duration: number;
 }
