@@ -27,6 +27,7 @@ export class Enemy {
   public level: Level;
   private lastFireTime: number = 0; // Track time since last bullet fired
   private movementController: MovementController;
+  private points: number;
 
   public static name(type: number): string {
     switch (type) {
@@ -57,6 +58,10 @@ export class Enemy {
     }
   }
 
+  // Health bar elements
+  private healthBar: THREE.Group | null = null;
+  private maxHitPoints: number = 1;
+
   constructor(
     level: Level,
     mesh: THREE.Mesh,
@@ -77,9 +82,16 @@ export class Enemy {
     const levelType = level.levelType;
 
     // Assign hitpoints and speed based on enemy type
-    const { hitPoints, speedMultiplier } = this.getBehavior();
+    const { hitPoints, speedMultiplier, points } = this.getBehavior();
+    this.points = points;
     this.hitPoints = hitPoints;
+    this.maxHitPoints = hitPoints; // Store the maximum hitpoints for health bar
     this.speed = this.modeState.enemySpeed * speedMultiplier;
+
+    // Create health bar for enemies with more than 1 hit point
+    if (hitPoints > 1) {
+      this.createHealthBar();
+    }
 
     // Assign movement style based on enemy type
     switch (type) {
@@ -172,6 +184,17 @@ export class Enemy {
     const scale = 0.5 + this.distanceFromCenter / (this.level.getRadius() * 2);
     this.mesh.scale.set(scale, scale, scale);
 
+    // Make the health bar always face the camera
+    if (this.healthBar) {
+      // Make health bar face the camera by aligning it with world up vector
+      this.healthBar.up.set(0, 1, 0);
+      this.healthBar.lookAt(0, 0, 5); // Look at camera (assumed to be at z=5)
+
+      // Scale the health bar inversely to enemy's scale so it maintains size
+      const barScale = 1 / scale;
+      this.healthBar.scale.set(barScale, barScale, barScale);
+    }
+
     // Call the movement controller's optional render method for special effects
     if (this.movementController.render) {
       this.movementController.render(this.scene);
@@ -189,17 +212,22 @@ export class Enemy {
   }
 
   remove(): void {
-    console.log("Removing enemy");
     // Clean up any resources from the movement controller
     if (this.movementController.cleanup) {
       this.movementController.cleanup(this.scene);
     }
+
+    // Clean up health bar if it exists
+    if (this.healthBar) {
+      // Health bar should automatically be removed since it's a child of the mesh
+      this.healthBar = null;
+    }
+
     this.scene.remove(this.mesh);
   }
 
   // Handle enemy explosion effects
   explode(): void {
-    console.log("exploding enemy");
     // Get enemy material and color
     const enemyMaterial = this.mesh.material as THREE.MeshStandardMaterial;
 
@@ -218,9 +246,116 @@ export class Enemy {
     this.remove();
   }
 
+  // Handle getting hit by a bullet
+  // Returns true if the enemy was destroyed, false if it just lost a hit point
+  takeDamage(): boolean {
+    // Reduce hit points
+    this.hitPoints--;
+
+    // Flash the enemy to indicate it was hit
+    this.flashOnHit();
+
+    // If hit points reached zero, return true (enemy destroyed)
+    return this.hitPoints <= 0;
+  }
+
+  // Create health bar for enemies with multiple hit points
+  private createHealthBar(): void {
+    // Create a group to hold the health bar
+    this.healthBar = new THREE.Group();
+
+    // Create the background bar (gray)
+    const bgBarGeometry = new THREE.BoxGeometry(1, 0.1, 0.05);
+    const bgBarMaterial = new THREE.MeshBasicMaterial({ color: 0x444444 });
+    const bgBar = new THREE.Mesh(bgBarGeometry, bgBarMaterial);
+
+    // Create the foreground bar (health indicator - green)
+    const fgBarGeometry = new THREE.BoxGeometry(1, 0.1, 0.06); // Slightly in front
+    const fgBarMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    const fgBar = new THREE.Mesh(fgBarGeometry, fgBarMaterial);
+
+    // Add the bars to the group
+    this.healthBar.add(bgBar);
+    this.healthBar.add(fgBar);
+
+    // Position the health bar above the enemy
+    this.healthBar.position.set(0, this.size * 1.5, 0);
+
+    // Add the health bar to the enemy mesh
+    this.mesh.add(this.healthBar);
+
+    // Store reference to the foreground bar for updating
+    this.healthBar.userData.foregroundBar = fgBar;
+  }
+
+  // Update the health bar to reflect current health
+  private updateHealthBar(): void {
+    if (!this.healthBar) return;
+
+    // Get the foreground bar
+    const fgBar = this.healthBar.userData.foregroundBar as THREE.Mesh;
+
+    if (fgBar) {
+      // Calculate health percentage
+      const healthPercent = this.hitPoints / this.maxHitPoints;
+
+      // Resize the bar
+      fgBar.scale.x = Math.max(0.01, healthPercent); // Ensure it's never zero
+
+      // Update the position to align with the left side of background bar
+      fgBar.position.x = (healthPercent - 1) / 2;
+
+      // Update color based on health (green -> yellow -> red)
+      const fgBarMaterial = fgBar.material as THREE.MeshBasicMaterial;
+
+      if (healthPercent > 0.6) {
+        fgBarMaterial.color.setHex(0x00ff00); // Green
+      } else if (healthPercent > 0.3) {
+        fgBarMaterial.color.setHex(0xffff00); // Yellow
+      } else {
+        fgBarMaterial.color.setHex(0xff0000); // Red
+      }
+    }
+  }
+
+  // Visual feedback when enemy is hit but not destroyed
+  private flashOnHit(): void {
+    // Get the material
+    const material = this.mesh.material as THREE.MeshStandardMaterial;
+
+    // Store original color if not already stored
+    if (!this.mesh.userData.originalColor) {
+      this.mesh.userData.originalColor = material.color.clone();
+    }
+
+    // Flash bright white
+    material.color.set(0xffffff);
+    material.emissive = material.emissive || new THREE.Color();
+    material.emissiveIntensity = material.emissiveIntensity || 0.5;
+    material.emissive.set(0xffffff);
+    material.emissiveIntensity = 1.0;
+
+    // Update health bar
+    this.updateHealthBar();
+
+    // Return to original color after a short delay
+    setTimeout(() => {
+      if (this.mesh && this.mesh.material) {
+        if (this.mesh.userData.originalColor) {
+          material.color.copy(this.mesh.userData.originalColor);
+        }
+        material.emissive.set(0x000000);
+        material.emissiveIntensity = 0.5;
+      }
+    }, 100);
+  }
+
+  public getPoints(): number {
+    return this.points;
+  }
+
   // Try to fire a bullet at the player
   private tryFireBullet(delta: number): void {
-    console.log("tryFireBullet");
     // Add time to last fire counter
     this.lastFireTime += delta;
 
@@ -235,7 +370,6 @@ export class Enemy {
 
   // Try to fire a bomb that explodes on boundary contact
   private tryFireBomb(delta: number): void {
-    console.log("tryFireBomb");
     // Add time to last fire counter
     this.lastFireTime += delta;
 
@@ -481,84 +615,91 @@ export class Enemy {
   private getBehavior(): {
     hitPoints: number;
     speedMultiplier: number;
-    movementStyle: string;
+    points: number;
   } {
     switch (this.type) {
       case 0: // Standard follower - always follows spokes
         return {
           hitPoints: 1,
           speedMultiplier: 1.0,
-          movementStyle: "spoke",
+          points: 10,
         };
 
       case 1: // Crosser - always follows spokes but crosses between them
         return {
           hitPoints: 2,
           speedMultiplier: 0.9,
-          movementStyle: "spokeCrossing",
+          points: 15,
         };
 
       case 2: // Speeder - follows patterns but moves faster
         return {
           hitPoints: 2,
           speedMultiplier: 1.5, // Faster!
-          movementStyle: "follow",
+          points: 20,
         };
 
       case 3: // Zigzagger - erratic zig-zag movement
         return {
           hitPoints: 3,
           speedMultiplier: 1.1,
-          movementStyle: "zigzag",
+          points: 30,
         };
 
       case 4: // Orbiter - circular orbital movement
         return {
           hitPoints: 3,
           speedMultiplier: 0.8,
-          movementStyle: "circular",
+          points: 40,
         };
 
       case 5: // Bouncer - bouncing movement pattern
         return {
           hitPoints: 4,
           speedMultiplier: 1.2,
-          movementStyle: "bounce",
+          points: 30,
         };
 
       case 6: // Chaotic - extremely erratic movement
         return {
           hitPoints: 4,
           speedMultiplier: 0.9,
-          movementStyle: "erratic",
+          points: 40,
         };
 
       case 7: // Hunter - attempts to home in on player
         return {
           hitPoints: 5,
           speedMultiplier: 0.7,
-          movementStyle: "homing",
+          points: 20,
         };
 
       case 8: // Pi-follower - follows pi symbol on pi levels
         return {
           hitPoints: 6,
           speedMultiplier: 0.8,
-          movementStyle: "pi",
+          points: 50,
         };
 
       case 9: // Advanced Pi-follower - follows pi symbol but faster and more hit points
         return {
           hitPoints: 8,
           speedMultiplier: 1.0,
-          movementStyle: "pi",
+          points: 60,
+        };
+
+      case 10:
+        return {
+          hitPoints: 1,
+          speedMultiplier: 3.0,
+          points: 5,
         };
 
       default: // Fallback for any unexpected enemy types
         return {
           hitPoints: 1,
           speedMultiplier: 1.0,
-          movementStyle: "follow",
+          points: 5,
         };
     }
   }

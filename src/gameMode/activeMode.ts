@@ -4,7 +4,7 @@ import { GameMode } from "./gameMode";
 import { SceneSetup } from "../scene";
 import { EnemyManager } from "../enemies";
 import { Enemy } from "../enemy";
-import { updateScore } from "../ui";
+import { updateScore, updateCountdownTimer } from "../ui";
 import { createPlayer, animatePlayer } from "../player";
 import { BloodMoon } from "../bloodMoon";
 import { Level, LevelType } from "../levels";
@@ -15,10 +15,9 @@ export class ActiveMode implements GameMode {
   private player: THREE.Group;
   private enemyManager: EnemyManager;
   private clock: THREE.Clock;
-  private lastEnemyTime: number = 0;
+  private nextEnemyTime: number = 0;
   private level!: Level;
   private levelRadius: number = 10;
-  private currentLevelType: LevelType = LevelType.Circle;
   private bloodMoon: BloodMoon;
   private transitionInProgress: boolean = false;
   private keys = {
@@ -72,13 +71,18 @@ export class ActiveMode implements GameMode {
     // Ensure player is in the scene
     this.sceneSetup.scene.add(this.player);
 
+    // Configure the blood moon with the current level's radius
+    this.bloodMoon.setLevelRadius(this.levelRadius);
     this.bloodMoon.enter();
-    setTimeout(() => {
-      this.bloodMoon.fadeOut();
-    }, 2000);
+
+    // Immediately start the blood moon growing (this will be invisible at first)
+    this.bloodMoon.startGrowing(60);
+
+    // Show the initial countdown time of 60 seconds
+    updateCountdownTimer(60);
 
     // Reset enemy spawn timer to start spawning enemies
-    this.lastEnemyTime = this.clock.getElapsedTime();
+    this.nextEnemyTime = this.clock.getElapsedTime();
 
     // Reset enemy spawning to random (not forced) when starting
     this.modeState.forcedEnemyType = undefined;
@@ -109,14 +113,38 @@ export class ActiveMode implements GameMode {
   public update(delta: number): void {
     const elapsedTime = this.clock.getElapsedTime();
 
+    // Get remaining time and update the countdown timer
+    if (!this.transitionInProgress) {
+      const remainingSeconds = this.bloodMoon.getRemainingTime();
+      updateCountdownTimer(remainingSeconds);
+
+      // Check if time has run out (and not in ghost mode)
+      if (remainingSeconds <= 0 && !this.modeState.ghostMode) {
+        this.handleBloodMoonReachedBoundary();
+        return;
+      }
+    }
+
+    // Check if the blood moon has reached the level boundary (backup check)
+    if (!this.transitionInProgress && !this.modeState.ghostMode) {
+      const moonProgress = this.bloodMoon.getGrowthProgress();
+      if (moonProgress >= 0.99) {
+        // Moon has reached the boundary, end the game if the player hasn't cleared the level
+        this.handleBloodMoonReachedBoundary();
+        return;
+      }
+    }
+
     // Create new enemies periodically if enemy spawning is enabled
     if (
       this.modeState.spawnEnemies &&
-      elapsedTime - this.lastEnemyTime > 1.5 &&
+      elapsedTime >= this.nextEnemyTime &&
       !this.transitionInProgress
     ) {
       this.enemyManager.createEnemy(this.level);
-      this.lastEnemyTime = elapsedTime;
+
+      const nextTime = 0.5 + 0.5 * (this.bloodMoon.getRemainingTime() / 60);
+      this.nextEnemyTime = elapsedTime + 0.5 + Math.random() * nextTime;
     }
 
     // Update enemies
@@ -253,22 +281,26 @@ export class ActiveMode implements GameMode {
     // Destroy all enemies
     this.destroyAllEnemies();
 
-    // Move the blood moon to the center and expand it to fill the level
-    this.bloodMoon.enter();
-    this.bloodMoon.moveToCenter(this.levelRadius);
+    // 1. EXPAND THE BLOOD MOON TO FILL THE LEVEL
 
-    // Wait for the blood moon to expand
-    await this.delay(1000);
+    // Expand the Blood Moon to fill the level
+    this.bloodMoon.startGrowing(1.5);
 
-    // Start the blood moon shrinking animation
-    this.bloodMoon.startShrinking();
+    // Wait 1.5s, and then wait briefly at maximum size for dramatic effect
+    await this.delay(2000);
 
-    // Fly the player ship to the blood moon (center)
+    // 2. SHRINK THE MOON WHILE FLYING THE PLAYER TO CENTER
+
+    // Start the Blood Moon collapsing animation
+    this.bloodMoon.startShrinking(2);
+
+    // Simultaneously fly the player to the center
     await this.flyPlayerToBloodMoon();
 
-    // Reset enemy spawning to random when advancing level
-    this.modeState.forcedEnemyType = undefined;
-    this.updateForcedEnemyTypeDisplay();
+    // Wait briefly for dramatic effect after collapse
+    await this.delay(300);
+
+    // 3. CREATE NEW LEVEL AND RESET EVERYTHING
 
     // Increment level
     this.gameState.currentLevel++;
@@ -280,9 +312,9 @@ export class ActiveMode implements GameMode {
     this.level = new Level(this.gameState.currentLevel, this.levelRadius);
     this.sceneSetup.scene.add(this.level.getGroup());
 
-    // Update the current level type
-    this.currentLevelType = ((this.gameState.currentLevel - 1) %
-      5) as LevelType;
+    // Reset enemy spawning to random
+    this.modeState.forcedEnemyType = undefined;
+    this.updateForcedEnemyTypeDisplay();
 
     // Reset player position to level outline
     const playerPosition = this.getPositionOnLevelOutline(
@@ -291,11 +323,13 @@ export class ActiveMode implements GameMode {
     this.player.position.set(playerPosition.x, playerPosition.y, 0);
     this.player.lookAt(0, 0, 0);
 
-    // Add a brief delay before ending the transition
-    await this.delay(500);
+    this.bloodMoon.setLevelRadius(this.levelRadius);
 
-    // Fade out the blood moon
-    this.bloodMoon.fadeOut();
+    // Start the Blood Moon growing for the new level
+    this.bloodMoon.startGrowing(60);
+
+    // Reset the countdown timer for the new level
+    updateCountdownTimer(60);
 
     // Give a brief period of invulnerability after level change
     this.modeState.ghostMode = true;
@@ -468,7 +502,7 @@ export class ActiveMode implements GameMode {
   private getPositionOnLevelOutline(angle: number): { x: number; y: number } {
     let x: number, y: number;
 
-    switch (this.currentLevelType) {
+    switch (this.level.levelType) {
       case LevelType.Circle:
       case LevelType.Spiral:
       case LevelType.PiSymbol:
@@ -577,28 +611,32 @@ export class ActiveMode implements GameMode {
           // Create an explosion at the level boundary for bombs
           this.createBombExplosion(bullet);
         }
-        
+
         // Remove the bullet
         this.sceneSetup.scene.remove(bullet.mesh);
         this.modeState.enemyBullets.splice(i, 1);
       }
     }
   }
-  
+
   // Create an explosion when a bomb hits the level boundary
   private createBombExplosion(bomb: Bullet): void {
     // Calculate position at boundary
     const bulletPos = bomb.mesh.position;
-    const direction = new THREE.Vector3(bulletPos.x, bulletPos.y, 0).normalize();
-    
+    const direction = new THREE.Vector3(
+      bulletPos.x,
+      bulletPos.y,
+      0
+    ).normalize();
+
     // Get the position on the boundary by calculating intersection with level shape
     // For simplicity, we'll use a circular boundary calculation
     const boundaryPosition = direction.clone().multiplyScalar(this.levelRadius);
-    
+
     // Get the color of the bomb to match the explosion color
     const bombMaterial = bomb.mesh.material as THREE.MeshStandardMaterial;
     const bombColor = bombMaterial.color || new THREE.Color(0xff6600); // Default orange if not available
-    
+
     // Import EnemyExplosion class from enemies.ts
     // We'll directly use the EnemyManager to create an explosion
     this.enemyManager.createExplosionAtPosition(boundaryPosition, bombColor);
@@ -632,35 +670,35 @@ export class ActiveMode implements GameMode {
 
     return false; // No collision detected
   }
-  
+
   // Check if player is hit by any active explosions
   private checkPlayerHitByExplosion(): boolean {
     // If no explosions are active, return quickly
     if (!this.modeState.explosions || this.modeState.explosions.length === 0) {
       return false;
     }
-    
+
     // Get player position
     const playerPos = this.player.position;
     const playerRadius = this.modeState.playerSize * 0.8; // Same collision radius as used for enemies
-    
+
     // Check each active explosion for collision with player
     for (const explosion of this.modeState.explosions) {
       // Only check if explosion has a non-zero radius (is active)
       if (explosion.radius <= 0) continue;
-      
+
       // Calculate distance between explosion center and player
       const dx = playerPos.x - explosion.position.x;
       const dy = playerPos.y - explosion.position.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      
+
       // Check for collision with explosion radius
       if (distance < playerRadius + explosion.radius) {
         // Player is hit by explosion!
         return true;
       }
     }
-    
+
     return false; // No collision detected
   }
 
@@ -679,35 +717,34 @@ export class ActiveMode implements GameMode {
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         if (distance < enemy.size + 0.2) {
-          // Collision detected
+          // Collision detected - apply damage to the enemy
+          const enemyDestroyed = enemy.takeDamage();
 
-          // Trigger enemy explosion.
-          enemy.explode();
+          if (enemyDestroyed) {
+            // Trigger explosion effect
+            enemy.explode();
 
-          this.modeState.enemies.splice(j, 1);
+            // Remove enemy from the list
+            this.modeState.enemies.splice(j, 1);
 
-          // Calculate score based on enemy type (pi-based)
-          const piMultiplier = 3.14 * this.gameState.currentLevel;
-          const points = Math.floor(enemy.type * piMultiplier);
-          this.gameState.score += points;
+            this.gameState.score += enemy.getPoints();
+            updateScore(this.gameState);
 
-          updateScore(this.gameState);
+            // Increase difficulty every 100 points
+            if (this.gameState.score % 100 === 0) {
+              this.modeState.enemySpeed += 0.005;
+            }
 
-          // Remove the bullet
+            // Level up every 314 points
+            if (this.gameState.score > this.gameState.currentLevel * 314) {
+              this.levelUp();
+            }
+          }
+
+          // Remove the bullet regardless of whether enemy was destroyed
           this.sceneSetup.scene.remove(bullet.mesh);
           this.modeState.bullets.splice(i, 1);
           hitDetected = true;
-
-          // Increase difficulty every 100 points
-          if (this.gameState.score % 100 === 0) {
-            this.modeState.enemySpeed += 0.005;
-          }
-
-          // Level up every 314 points
-          if (this.gameState.score > this.gameState.currentLevel * 314) {
-            this.levelUp();
-          }
-
           break;
         }
       }
@@ -752,11 +789,18 @@ export class ActiveMode implements GameMode {
   }
 
   private async flyPlayerToBloodMoon(): Promise<void> {
-    const duration = 1500; // 1.5 seconds
+    const duration = 2000; // Longer duration (2 seconds) to match with Blood Moon collapse
     const startPosition = {
       x: this.player.position.x,
       y: this.player.position.y,
       z: this.player.position.z,
+    };
+
+    // Add a small rotation effect as the player flies in
+    const startRotation = {
+      x: this.player.rotation.x,
+      y: this.player.rotation.y,
+      z: this.player.rotation.z,
     };
 
     return new Promise<void>((resolve) => {
@@ -766,26 +810,69 @@ export class ActiveMode implements GameMode {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
 
-        // Easing function for smooth animation
+        // Custom easing function for dramatic flight
+        // Starts slow, accelerates, then slows at the end
         const easeProgress =
-          progress < 0.5
-            ? 2 * progress * progress
-            : -1 + (4 - 2 * progress) * progress;
+          progress < 0.3
+            ? 3 * progress * progress
+            : progress > 0.7
+            ? 1 - Math.pow(-2 * progress + 2, 2) / 2
+            : 0.27 + (progress - 0.3) * 1.15; // Linear in middle section
 
         // Move player toward center of screen (where blood moon is)
         this.player.position.x = startPosition.x * (1 - easeProgress);
         this.player.position.y = startPosition.y * (1 - easeProgress);
-        this.player.position.z = startPosition.z + easeProgress * 2; // Move slightly forward
+        this.player.position.z = startPosition.z + easeProgress * 3; // Move more forward for dramatic effect
+
+        // Add slight rotation as player flies in (barrel roll effect)
+        const rotationEffect = Math.sin(progress * Math.PI * 4) * 0.15;
+        this.player.rotation.z = startRotation.z + rotationEffect;
 
         // Shrink player as it approaches center
-        const scale = 1 - easeProgress * 0.5;
+        const scale = 1 - easeProgress * 0.6;
         this.player.scale.set(scale, scale, scale);
+
+        // Add a slight color effect to the player (gets redder as it approaches the Blood Moon)
+        this.player.traverse((object) => {
+          if (object instanceof THREE.Mesh && object.material) {
+            const material = object.material as THREE.MeshBasicMaterial;
+            if (material && material.color) {
+              // Store original color if not already stored
+              if (!object.userData.originalColor) {
+                object.userData.originalColor = material.color.clone();
+              }
+
+              // Apply red tint
+              material.color.setRGB(
+                1, // Full red
+                1 - easeProgress * 0.7, // Reduce green
+                1 - easeProgress * 0.7 // Reduce blue
+              );
+            }
+          }
+        });
 
         if (progress < 1) {
           requestAnimationFrame(animate);
         } else {
-          // Reset player scale
+          // Reset player scale and rotation
           this.player.scale.set(1, 1, 1);
+          this.player.rotation.set(
+            startRotation.x,
+            startRotation.y,
+            startRotation.z
+          );
+
+          // Reset player color to original
+          this.player.traverse((object) => {
+            if (object instanceof THREE.Mesh && object.material) {
+              const material = object.material as THREE.MeshBasicMaterial;
+              if (material && material.color && object.userData.originalColor) {
+                material.color.copy(object.userData.originalColor);
+              }
+            }
+          });
+
           resolve();
         }
 
@@ -802,6 +889,43 @@ export class ActiveMode implements GameMode {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // Handle when the blood moon reaches the level boundary
+  private handleBloodMoonReachedBoundary(): void {
+    // Show a warning message
+    const warningMessage = document.createElement("div");
+    warningMessage.id = "blood-moon-warning";
+    warningMessage.style.position = "absolute";
+    warningMessage.style.top = "30%";
+    warningMessage.style.left = "50%";
+    warningMessage.style.transform = "translate(-50%, -50%)";
+    warningMessage.style.color = "#FF0000";
+    warningMessage.style.fontFamily = "Arial, sans-serif";
+    warningMessage.style.fontSize = "48px";
+    warningMessage.style.fontWeight = "bold";
+    warningMessage.style.textAlign = "center";
+    warningMessage.style.textShadow = "0 0 10px #FF0000";
+    warningMessage.innerHTML = "THE BLOOD MOON HAS CONSUMED YOU";
+    document.body.appendChild(warningMessage);
+
+    // Play a sound effect (could be added)
+    // const audio = new Audio("explosion-1.mp3");
+    // audio.volume = 0.8;
+    // audio.play();
+
+    // Pause for dramatic effect, then end the game
+    setTimeout(() => {
+      // Remove the warning message
+      document.body.removeChild(warningMessage);
+
+      // Trigger game over
+      document.dispatchEvent(
+        new CustomEvent("gameStatusChanged", {
+          detail: { status: "gameOver" },
+        })
+      );
+    }, 2000);
   }
 
   private updatePlayerAngle(targetAngle: number): void {
