@@ -19,11 +19,14 @@ export interface ActiveModeState {
   enemySpeed: number;
   enemies: Enemy[];
   bullets: Bullet[];
+  enemyBullets: Bullet[]; // Bullets fired by enemies
   ghostMode: boolean;
+  playerPosition?: { x: number; y: number }; // Added for enemy targeting
 }
 
 export interface Bullet {
   mesh: THREE.Mesh;
   direction: THREE.Vector2;
   speed: number;
+  fromEnemy?: boolean; // Flag to identify enemy bullets
 }

@@ -145,6 +145,31 @@ function createSpiralLevel(group: THREE.Group, radius: number): void {
   });
   const ring = new THREE.Mesh(outerRing, outerMaterial);
   group.add(ring);
+  
+  // Add spokes radiating from center
+  const spokeCount = 20;
+  const spokeGeometry = new THREE.BufferGeometry();
+
+  const positions = [];
+  for (let i = 0; i < spokeCount; i++) {
+    const angle = (i / spokeCount) * Math.PI * 2;
+    positions.push(0, 0, 0);
+    positions.push(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+  }
+
+  spokeGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3)
+  );
+
+  const spokeMaterial = new THREE.LineBasicMaterial({
+    color: 0x00ffcc,
+    transparent: true,
+    opacity: 0.4,
+  });
+  const spokes = new THREE.LineSegments(spokeGeometry, spokeMaterial);
+
+  group.add(spokes);
 }
 
 // Create a star-shaped level
@@ -198,6 +223,35 @@ function createStarLevel(
   const filledStar = new THREE.Mesh(filledGeometry, filledMaterial);
 
   group.add(filledStar);
+  
+  // Add spokes radiating from center to each star point
+  const spokeGeometry = new THREE.BufferGeometry();
+  const spokeVertices = [];
+  
+  // Add spokes to the points of the star
+  for (let i = 0; i < points * 2; i += 2) {  // Only to the outer points
+    const angle = (i / (points * 2)) * Math.PI * 2;
+    spokeVertices.push(0, 0, 0);  // Center
+    spokeVertices.push(
+      Math.cos(angle) * radius,
+      Math.sin(angle) * radius,
+      0
+    );  // Outer point
+  }
+
+  spokeGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(spokeVertices, 3)
+  );
+
+  const spokeMaterial = new THREE.LineBasicMaterial({
+    color: 0xff66aa,
+    transparent: true,
+    opacity: 0.5,
+  });
+  const spokes = new THREE.LineSegments(spokeGeometry, spokeMaterial);
+
+  group.add(spokes);
 }
 
 // Create a level shaped like the Pi symbol
@@ -256,6 +310,31 @@ function createPiSymbolLevel(group: THREE.Group, radius: number): void {
   const piSymbol = new THREE.LineSegments(piGeometry, piMaterial);
 
   group.add(piSymbol);
+  
+  // Add spokes radiating from center
+  const spokeCount = 18;
+  const spokeGeometry = new THREE.BufferGeometry();
+
+  const positions = [];
+  for (let i = 0; i < spokeCount; i++) {
+    const angle = (i / spokeCount) * Math.PI * 2;
+    positions.push(0, 0, 0);
+    positions.push(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+  }
+
+  spokeGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3)
+  );
+
+  const spokeMaterial = new THREE.LineBasicMaterial({
+    color: 0xffcc66,
+    transparent: true,
+    opacity: 0.4,
+  });
+  const spokes = new THREE.LineSegments(spokeGeometry, spokeMaterial);
+
+  group.add(spokes);
 }
 
 // Create a wave/sine level based on pi
@@ -304,4 +383,29 @@ function createWaveLevel(group: THREE.Group, radius: number): void {
 
     group.add(wave);
   }
+  
+  // Add spokes radiating from center
+  const spokeCount = 24;
+  const spokeGeometry = new THREE.BufferGeometry();
+
+  const positions = [];
+  for (let i = 0; i < spokeCount; i++) {
+    const angle = (i / spokeCount) * Math.PI * 2;
+    positions.push(0, 0, 0);
+    positions.push(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+  }
+
+  spokeGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3)
+  );
+
+  const spokeMaterial = new THREE.LineBasicMaterial({
+    color: 0x66ff99,
+    transparent: true,
+    opacity: 0.5,
+  });
+  const spokes = new THREE.LineSegments(spokeGeometry, spokeMaterial);
+
+  group.add(spokes);
 }

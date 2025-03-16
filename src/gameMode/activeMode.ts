@@ -33,6 +33,7 @@ export class ActiveMode implements GameMode {
     enemySpeed: 0.03,
     enemies: [],
     bullets: [],
+    enemyBullets: [],
     ghostMode: false,
   };
 
@@ -115,11 +116,24 @@ export class ActiveMode implements GameMode {
     // Update enemies
     this.enemyManager.update(delta);
 
-    // Update bullets
+    // Update player bullets
     this.updateBullets(delta);
+    
+    // Update enemy bullets
+    this.updateEnemyBullets(delta);
 
     // Check for enemy-bullet collisions
     this.checkBulletCollisions();
+    
+    // Check if player is hit by enemy bullets (only if ghost mode is not active)
+    if (!this.modeState.ghostMode && !this.transitionInProgress && this.checkPlayerHitByEnemyBullets()) {
+      document.dispatchEvent(
+        new CustomEvent("gameStatusChanged", {
+          detail: { status: "gameOver" },
+        })
+      );
+      return;
+    }
 
     // Check for player-enemy collisions (only if ghost mode is not active and not during transition)
     if (
@@ -143,6 +157,12 @@ export class ActiveMode implements GameMode {
       this.modeState.playerAngle
     );
     this.player.position.set(playerPosition.x, playerPosition.y, 0);
+    
+    // Store current player position in modeState for enemy targeting
+    this.modeState.playerPosition = { 
+      x: playerPosition.x, 
+      y: playerPosition.y 
+    };
 
     // Point player toward center
     this.player.lookAt(0, 0, 0);
@@ -161,11 +181,17 @@ export class ActiveMode implements GameMode {
     // Remove all enemies
     this.destroyAllEnemies();
 
-    // Remove all bullets
+    // Remove all player bullets
     for (const bullet of this.modeState.bullets) {
       this.sceneSetup.scene.remove(bullet.mesh);
     }
     this.modeState.bullets = [];
+    
+    // Remove all enemy bullets
+    for (const bullet of this.modeState.enemyBullets) {
+      this.sceneSetup.scene.remove(bullet.mesh);
+    }
+    this.modeState.enemyBullets = [];
 
     // Remove level if it exists
     if (this.level) {
@@ -453,6 +479,59 @@ export class ActiveMode implements GameMode {
         this.modeState.bullets.splice(i, 1);
       }
     }
+  }
+  
+  // Update enemy bullets
+  private updateEnemyBullets(delta: number): void {
+    for (let i = this.modeState.enemyBullets.length - 1; i >= 0; i--) {
+      const bullet = this.modeState.enemyBullets[i];
+
+      // Move bullet
+      bullet.mesh.position.x += bullet.direction.x * bullet.speed;
+      bullet.mesh.position.y += bullet.direction.y * bullet.speed;
+
+      // Remove bullets that are too far from center or out of bounds
+      const distanceFromCenter = Math.sqrt(
+        bullet.mesh.position.x * bullet.mesh.position.x +
+          bullet.mesh.position.y * bullet.mesh.position.y
+      );
+
+      if (distanceFromCenter < 1 || distanceFromCenter > this.levelRadius + 5) {
+        this.sceneSetup.scene.remove(bullet.mesh);
+        this.modeState.enemyBullets.splice(i, 1);
+      }
+    }
+  }
+  
+  // Check if player is hit by any enemy bullets
+  private checkPlayerHitByEnemyBullets(): boolean {
+    if (!this.player) return false;
+    
+    // Get player position
+    const playerPos = this.player.position;
+    const playerRadius = this.modeState.playerSize * 0.8; // Same collision radius as used for enemies
+    
+    // Check each enemy bullet for collision with player
+    for (let i = this.modeState.enemyBullets.length - 1; i >= 0; i--) {
+      const bullet = this.modeState.enemyBullets[i];
+      
+      // Calculate distance between bullet and player
+      const dx = playerPos.x - bullet.mesh.position.x;
+      const dy = playerPos.y - bullet.mesh.position.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Check for collision (bullet radius is approximately 0.15)
+      if (distance < playerRadius + 0.15) {
+        // Remove the bullet
+        this.sceneSetup.scene.remove(bullet.mesh);
+        this.modeState.enemyBullets.splice(i, 1);
+        
+        // Player is hit!
+        return true;
+      }
+    }
+    
+    return false; // No collision detected
   }
 
   private checkBulletCollisions(): void {

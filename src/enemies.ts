@@ -9,7 +9,12 @@ export class EnemyManager {
   private levelRadius: number;
   private numSpokes: number = 8; // Number of spokes in the wheel
 
-  constructor(scene: THREE.Scene, gameState: GameState, modeState: ActiveModeState, levelRadius: number) {
+  constructor(
+    scene: THREE.Scene,
+    gameState: GameState,
+    modeState: ActiveModeState,
+    levelRadius: number
+  ) {
     this.scene = scene;
     this.gameState = gameState;
     this.modeState = modeState;
@@ -38,10 +43,11 @@ export class EnemyManager {
       9, // Maximum enemy type is 9
       Math.ceil(this.gameState.currentLevel * 2 - 1) // 2 new types per level
     );
-    
+
     // Select a random enemy type from the available range
-    const enemyType = Math.floor(Math.random() * (maxEnemyType + 1));
-    
+    // const enemyType = Math.floor(Math.random() * (maxEnemyType + 1));
+    let enemyType = 8;
+
     // Create enemy geometry based on the enemy type
     const enemyGeometry = Enemy.getGeometry(enemyType);
 
@@ -62,43 +68,89 @@ export class EnemyManager {
     // Position enemy at center initially
     mesh.position.set(0, 0, 0);
 
-    // Determine movement style based on level type
+    // Determine movement style based on enemy type and level type
     let angle;
     let movementStyle;
 
     // Get the current level type
     const levelType = this.getLevelType(this.gameState.currentLevel);
 
-    // Determine if enemy follows spokes or level-specific path
-    const followLevelPath = Math.random() > 0.6; // 40% chance of following level-specific path
+    // Generate a random angle for initial positioning
+    angle = Math.random() * Math.PI * 2;
 
-    if (followLevelPath && levelType !== "circle") {
-      // Level-specific path movement
-      angle = Math.random() * Math.PI * 2;
-      switch (levelType) {
-        case "spiral":
-          movementStyle = "spiral";
-          break;
-        case "star":
-          movementStyle = "star";
-          break;
-        case "wave":
-          movementStyle = "wave";
-          break;
-        case "pi":
-          movementStyle = "pi";
-          break;
-        default:
+    // Assign movement style based on enemy type
+    switch (enemyType) {
+      case 0: // Type 0: Always follows spokes
+        // Always use spoke movement regardless of level type
+        movementStyle = "spoke";
+        break;
+
+      case 1: // Type 1: Always follows spokes but can cross between them
+        // Always use spoke crossing regardless of level type
+        movementStyle = "spokeCrossing";
+        break;
+
+      case 2: // Type 2: Follows patterns but moves faster (speed is handled later)
+        // Same as type 0 but with speed multiplier (applied below)
+        if (levelType === "circle") {
           movementStyle = "spoke";
-      }
-    } else {
-      // Default spoke-based movement
+        } else {
+          movementStyle = levelType;
+        }
+        break;
+
+      case 3: // Type 3: Zigzag movement
+        movementStyle = "zigzag";
+        break;
+
+      case 4: // Type 4: Circular orbit movement
+        movementStyle = "circular";
+        break;
+
+      case 5: // Type 5: Bouncing movement
+        movementStyle = "bounce";
+        break;
+
+      case 6: // Type 6: Erratic movement
+        movementStyle = "erratic";
+        break;
+
+      case 7: // Type 7: Homing movement (tries to follow player)
+        movementStyle = "homing";
+        break;
+
+      case 8: // Type 8: Follows Pi symbol on Pi level (4) and level 5, otherwise uses spokes
+        // Force Pi movement if on pi level or level 5 (wave level)
+        if (levelType === "pi") {
+          movementStyle = "pi";
+        } else {
+          // Default to spoke movement on other levels
+          movementStyle = "spoke";
+        }
+        break;
+
+      case 9: // Type 9: Only on Pi level and follows Pi symbol, otherwise uses spokes
+        // Force Pi movement if on pi level
+        if (levelType === "pi") {
+          movementStyle = "pi";
+        } else {
+          // Default to spoke movement on non-pi levels
+          movementStyle = "spoke";
+        }
+        break;
+
+      default:
+        // Default to spoke movement
+        movementStyle = "spoke";
+    }
+    console.log("levelType", levelType);
+    console.log("enemyType", enemyType);
+    console.log("movementStyle", movementStyle);
+
+    // If using spoke movement, calculate spoke-specific angle
+    if (movementStyle === "spoke" || movementStyle === "spokeCrossing") {
       const spokeIndex = Math.floor(Math.random() * this.numSpokes);
       angle = (spokeIndex / this.numSpokes) * Math.PI * 2;
-
-      // Determine if this enemy will cross between spokes
-      const willCross = Math.random() > 0.7; // 30% chance to cross between spokes
-      movementStyle = willCross ? "spokeCrossing" : "spoke";
     }
 
     // Assign hitpoints and speed based on enemy type
@@ -106,6 +158,23 @@ export class EnemyManager {
 
     // Randomize size slightly
     const size = 0.3 + enemyType / 20 + Math.random() * 0.1;
+
+    // Handle special cases for the "follow" and "cross" behaviors
+    if (movementStyle === "follow") {
+      // Transform "follow" into actual movement style based on level type
+      if (levelType === "circle" || enemyType === 0) {
+        movementStyle = "spoke";
+      } else {
+        movementStyle = levelType;
+      }
+    } else if (movementStyle === "cross") {
+      // Transform "cross" into crossing movement style based on level type
+      if (levelType === "circle" || enemyType === 1) {
+        movementStyle = "spokeCrossing";
+      } else {
+        movementStyle = levelType + "Crossing";
+      }
+    }
 
     // Create the enemy object
     const enemy = new Enemy(
@@ -129,15 +198,40 @@ export class EnemyManager {
       enemy.spokeCrossingSpeed = 0.01 + Math.random() * 0.03; // random speed for crossing
     }
 
-    // Store level-specific path parameters
-    if (["spiral", "wave", "pi", "star"].includes(movementStyle)) {
+    // Always ensure path params are initialized for pi movement
+    if (movementStyle === "pi") {
       enemy.pathParams = {
         startAngle: angle,
-        spiralTightness: 0.1 + Math.random() * 0.2,
-        waveAmplitude: 0.5 + Math.random() * 1.0,
-        waveFrequency: 2 + Math.random() * 3,
+        spiralTightness: 0.1,
+        waveAmplitude: 0.7,
+        waveFrequency: 3.0,
         pathOffset: Math.random() * Math.PI * 2,
       };
+    } else {
+      // Store level-specific path parameters
+      if (
+        [
+          "spiral",
+          "wave",
+          "pi",
+          "star",
+          "spiralCrossing",
+          "waveCrossing",
+          "piCrossing",
+          "starCrossing",
+          "bounce",
+          "erratic",
+          "homing",
+        ].includes(movementStyle)
+      ) {
+        enemy.pathParams = {
+          startAngle: angle,
+          spiralTightness: 0.1 + Math.random() * 0.2,
+          waveAmplitude: 0.5 + Math.random() * 1.0,
+          waveFrequency: 2 + Math.random() * 3,
+          pathOffset: Math.random() * Math.PI * 2,
+        };
+      }
     }
 
     this.scene.add(mesh);
@@ -148,18 +242,23 @@ export class EnemyManager {
   private getLevelType(levelNumber: number): string {
     switch ((levelNumber - 1) % 5) {
       case 0:
-        return "circle";
+        return "circle"; // Level 1, 6, 11, etc.
       case 1:
-        return "spiral";
+        return "spiral"; // Level 2, 7, 12, etc.
       case 2:
-        return "star";
+        return "star"; // Level 3, 8, 13, etc.
       case 3:
-        return "pi";
+        return "wave"; // Level 4, 9, 14, etc.
       case 4:
-        return "wave";
+        return "pi"; // Level 5, 10, 15, etc.
       default:
         return "circle";
     }
+  }
+
+  // Determine if a level has spokes (all levels have spokes)
+  private levelHasSpokes(): boolean {
+    return true; // Every level has spokes
   }
 
   update(delta: number): void {

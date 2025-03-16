@@ -21,6 +21,7 @@ export class Enemy {
   private scene: THREE.Scene;
   // Number of spokes in the current level (needed for spoke movement)
   private numSpokes: number = 8;
+  private lastFireTime: number = 0; // Track time since last bullet fired
   public pathParams?: {
     startAngle: number;
     spiralTightness: number;
@@ -74,6 +75,64 @@ export class Enemy {
     let x: number, y: number;
 
     switch (this.movementStyle) {
+      case "erratic": // Type 6: Chaotic movement
+        // Very erratic zig-zag with random direction changes
+        this.angle +=
+          (Math.sin(this.distanceFromCenter * 0.5) +
+            Math.cos(this.distanceFromCenter * 0.3)) *
+          0.2;
+        // Add some random jitter
+        this.angle += (Math.random() - 0.5) * 0.1;
+        x = Math.cos(this.angle) * this.distanceFromCenter;
+        y = Math.sin(this.angle) * this.distanceFromCenter;
+        break;
+
+      case "bounce": // Type 5: Bouncing movement
+        // Calculate bounce effect
+        const bouncePhase = Math.floor(
+          this.distanceFromCenter / (levelRadius * 0.2)
+        );
+        const bounceProgress =
+          (this.distanceFromCenter % (levelRadius * 0.2)) / (levelRadius * 0.2);
+
+        // Switch direction on each bounce phase
+        if (bouncePhase % 2 === 0) {
+          // Moving outward
+          this.angle = this.pathParams?.startAngle || this.angle;
+        } else {
+          // Moving inward temporarily
+          this.angle = this.pathParams?.startAngle || this.angle;
+          // Temporarily reduce distance to create bounce effect
+          const bounceAmount =
+            Math.sin(bounceProgress * Math.PI) * (levelRadius * 0.1);
+          this.distanceFromCenter -= bounceAmount;
+        }
+
+        x = Math.cos(this.angle) * this.distanceFromCenter;
+        y = Math.sin(this.angle) * this.distanceFromCenter;
+        break;
+
+      case "homing": // Type 7: Homing movement
+        // Calculate vector to center (as a proxy for player position)
+        // In a real implementation, this would use the actual player position
+        const dx = -Math.cos(this.angle) * this.distanceFromCenter * 0.1;
+        const dy = -Math.sin(this.angle) * this.distanceFromCenter * 0.1;
+
+        // Adjust angle to move toward center/player
+        const targetAngle = Math.atan2(dy, dx);
+        const angleDiff = targetAngle - this.angle;
+
+        // Normalize angle difference
+        const normalizedDiff =
+          ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+
+        // Gradually turn toward target
+        this.angle += normalizedDiff * delta * 0.5;
+
+        x = Math.cos(this.angle) * this.distanceFromCenter;
+        y = Math.sin(this.angle) * this.distanceFromCenter;
+        break;
+
       case "zigzag":
         this.angle += Math.sin(this.distanceFromCenter / 10) * 0.1;
         x = Math.cos(this.angle) * this.distanceFromCenter;
@@ -87,11 +146,21 @@ export class Enemy {
         break;
 
       case "spiral":
+      case "spiralCrossing":
         // Spiral path - angle changes as distance increases
         if (this.pathParams) {
-          this.angle =
-            this.pathParams.startAngle +
-            this.distanceFromCenter * this.pathParams.spiralTightness;
+          if (this.movementStyle === "spiralCrossing") {
+            // Add cross-path variation to the spiral
+            this.angle =
+              this.pathParams.startAngle +
+              this.distanceFromCenter * this.pathParams.spiralTightness +
+              Math.sin(this.distanceFromCenter * 0.2) * 0.5; // Add oscillation for crossing
+          } else {
+            // Regular spiral
+            this.angle =
+              this.pathParams.startAngle +
+              this.distanceFromCenter * this.pathParams.spiralTightness;
+          }
           x = Math.cos(this.angle) * this.distanceFromCenter;
           y = Math.sin(this.angle) * this.distanceFromCenter;
         } else {
@@ -101,18 +170,38 @@ export class Enemy {
         break;
 
       case "wave":
+      case "waveCrossing":
         // Wave path - sinusoidal movement
         if (this.pathParams) {
           // Base angle determines the spoke we're moving along
           const baseAngle = this.pathParams.startAngle;
-          // Add sine wave modulation to angle
-          const waveOffset =
+
+          // Calculate wave offset
+          let waveOffset =
             (Math.sin(
               (this.distanceFromCenter * this.pathParams.waveFrequency) /
                 levelRadius
             ) *
               this.pathParams.waveAmplitude) /
             levelRadius;
+
+          // For crossing waves, add an additional perpendicular wave component
+          if (this.movementStyle === "waveCrossing") {
+            // Add a secondary wave that's out of phase
+            const secondaryWave =
+              (Math.cos(
+                (this.distanceFromCenter *
+                  this.pathParams.waveFrequency *
+                  1.5) /
+                  levelRadius
+              ) *
+                this.pathParams.waveAmplitude *
+                0.7) /
+              levelRadius;
+
+            // Combine the waves
+            waveOffset += secondaryWave;
+          }
 
           this.angle = baseAngle + waveOffset;
           x = Math.cos(this.angle) * this.distanceFromCenter;
@@ -124,7 +213,19 @@ export class Enemy {
         break;
 
       case "pi":
+      case "piCrossing":
         // Pi symbol path
+        // Always ensure enemies of type 8 and 9 have pathParams for Pi movement
+        if ((this.type === 8 || this.type === 9) && !this.pathParams) {
+          this.pathParams = {
+            startAngle: this.angle,
+            spiralTightness: 0.1,
+            waveAmplitude: 0.7,
+            waveFrequency: 3.0,
+            pathOffset: Math.random() * Math.PI * 2,
+          };
+        }
+
         if (this.pathParams) {
           // Calculate position along pi symbol
           // The pi symbol consists of:
@@ -133,6 +234,37 @@ export class Enemy {
 
           // Normalize distance to create pi symbol within level radius
           const normalizedDist = this.distanceFromCenter / levelRadius;
+
+          // Random starting position on Pi symbol for enemy types 8 and 9
+          if (
+            this.distanceFromCenter === 0 &&
+            (this.type === 8 || this.type === 9)
+          ) {
+            // Randomly decide which part of the Pi symbol to start on
+            const piPart = Math.floor(Math.random() * 3); // 0: horizontal, 1: left leg, 2: right leg
+
+            if (piPart === 0) {
+              // Start on horizontal bar - random position along the bar
+              const t = Math.random(); // 0 to 1 position along the bar
+              x = -levelRadius * 0.5 + t * levelRadius;
+              y = -levelRadius * 0.15;
+              this.distanceFromCenter = 0.4 * levelRadius; // Skip initial approach
+            } else if (piPart === 1) {
+              // Start on left leg - random position along the leg
+              x = -levelRadius * 0.4;
+              y = -levelRadius * 0.15 - Math.random() * levelRadius * 0.85;
+              this.distanceFromCenter = 0.6 * levelRadius; // Skip to vertical part
+            } else {
+              // Start on right leg - random position along the leg
+              x = levelRadius * 0.4;
+              y = -levelRadius * 0.15 - Math.random() * levelRadius * 0.85;
+              this.distanceFromCenter = 0.6 * levelRadius; // Skip to vertical part
+            }
+
+            // Update angle for proper orientation
+            this.angle = Math.atan2(y, x);
+            return; // Return early after setting initial position
+          }
 
           if (normalizedDist < 0.3) {
             // Initial approach from center
@@ -150,13 +282,38 @@ export class Enemy {
                 : levelRadius * 0.5 - t * levelRadius;
             y = -levelRadius * 0.15;
           } else {
-            // Moving down vertical line
-            const legPosition =
-              this.pathParams.startAngle < Math.PI * 0.67
-                ? -levelRadius * 0.4
-                : this.pathParams.startAngle < Math.PI * 1.33
-                ? 0
-                : levelRadius * 0.4;
+            // Moving down vertical line - default positions
+            // Determine which leg of Pi to follow based on angle
+            let legPosition;
+            if (this.pathParams.startAngle < Math.PI * 0.67) {
+              legPosition = -levelRadius * 0.4; // Left leg
+            } else if (this.pathParams.startAngle < Math.PI * 1.33) {
+              legPosition = 0; // Middle (for type 9)
+            } else {
+              legPosition = levelRadius * 0.4; // Right leg
+            }
+
+            // For crossing pi, allow swapping between legs
+            if (this.movementStyle === "piCrossing" && normalizedDist > 0.7) {
+              const crossPhase = Math.floor((normalizedDist - 0.7) * 10);
+              if (crossPhase % 2 === 1) {
+                // Periodically swap legs
+                if (legPosition === -levelRadius * 0.4) {
+                  legPosition = 0;
+                } else if (legPosition === 0) {
+                  legPosition =
+                    legPosition === -levelRadius * 0.4
+                      ? levelRadius * 0.4
+                      : -levelRadius * 0.4;
+                } else {
+                  legPosition = 0;
+                }
+              }
+
+              // Add some subtle horizontal oscillation
+              legPosition += Math.sin(normalizedDist * 15) * 0.1 * levelRadius;
+            }
+
             x = legPosition;
             y =
               -levelRadius * 0.15 - (normalizedDist - 0.5) * levelRadius * 0.85;
@@ -171,6 +328,7 @@ export class Enemy {
         break;
 
       case "star":
+      case "starCrossing":
         // Star path
         if (this.pathParams) {
           // Number of star points increases with level
@@ -179,9 +337,28 @@ export class Enemy {
           const pointAngle = (Math.PI * 2) / starPoints;
 
           // Calculate which point we're moving toward
-          const pointIndex = Math.floor(
+          let pointIndex = Math.floor(
             (this.pathParams.startAngle / (Math.PI * 2)) * starPoints
           );
+
+          // For crossing stars, occasionally jump to a different point
+          if (this.movementStyle === "starCrossing") {
+            const jumpPhase = Math.floor(
+              this.distanceFromCenter / (levelRadius * 0.2)
+            );
+            if (
+              jumpPhase % 3 === 0 &&
+              this.distanceFromCenter > levelRadius * 0.3
+            ) {
+              // Jump to a different point randomly
+              pointIndex =
+                (pointIndex +
+                  1 +
+                  Math.floor(Math.random() * (starPoints - 2))) %
+                starPoints;
+            }
+          }
+
           const nextPointIndex = (pointIndex + 1) % starPoints;
 
           // Calculate angle to current and next point
@@ -196,15 +373,25 @@ export class Enemy {
           const toOuter =
             Math.floor((this.distanceFromCenter / levelRadius) * 10) % 2 === 0;
 
+          // For crossing stars, add some oscillation to the angle
+          let targetAngle;
           if (toOuter) {
             // Moving to outer point
-            const targetAngle = currentPointAngle;
-            this.angle = targetAngle;
+            targetAngle = currentPointAngle;
+            if (this.movementStyle === "starCrossing") {
+              // Add slight wobble when moving to points
+              targetAngle += Math.sin(this.distanceFromCenter * 2) * 0.1;
+            }
           } else {
             // Moving to inner corner
-            const targetAngle = currentPointAngle + pointAngle / 2;
-            this.angle = targetAngle;
+            targetAngle = currentPointAngle + pointAngle / 2;
+            if (this.movementStyle === "starCrossing") {
+              // Add slight wobble when moving to corners
+              targetAngle += Math.cos(this.distanceFromCenter * 3) * 0.15;
+            }
           }
+
+          this.angle = targetAngle;
 
           const currentRadius = toOuter
             ? innerRadius +
@@ -278,11 +465,126 @@ export class Enemy {
     // Scale enemy as it moves outward for better visibility
     const scale = 0.5 + this.distanceFromCenter / (levelRadius * 2);
     this.mesh.scale.set(scale, scale, scale);
+
+    // For enemy type 8, fire bullets at the player
+    if (this.type === 8) {
+      this.tryFireBullet(delta);
+    }
   }
 
   // Check if enemy is outside the level boundary
   isOffscreen(levelRadius: number): boolean {
     return this.distanceFromCenter > levelRadius + 2;
+  }
+
+  // Try to fire a bullet at the player
+  private tryFireBullet(delta: number): void {
+    // Only fire bullets when enemy is within a certain range
+    const minFireDistance = 3; // Min distance from center to start firing
+    const maxFireDistance = 8; // Max distance from center to stop firing
+
+    // Check if enemy is in firing range
+    if (
+      this.distanceFromCenter < minFireDistance ||
+      this.distanceFromCenter > maxFireDistance
+    ) {
+      return;
+    }
+
+    // Add time to last fire counter
+    this.lastFireTime += delta;
+
+    // Fire bullets every 2-3 seconds
+    const fireInterval = 2 + Math.random();
+
+    if (this.lastFireTime > fireInterval) {
+      this.lastFireTime = 0; // Reset fire timer
+      this.fireBullet();
+    }
+  }
+
+  // Fire a bullet toward the player on the level edge
+  private fireBullet(): void {
+    // Create a bullet
+    const bulletGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+    const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Red bullet
+    const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+
+    // Set bullet position at enemy location
+    bullet.position.set(this.mesh.position.x, this.mesh.position.y, 0);
+
+    // Get the player's position for targeting
+    let playerDirection: THREE.Vector2;
+    const enemyPos = this.mesh.position;
+    
+    // Use actual player position for targeting if available
+    if (this.modeState.playerPosition) {
+      // Calculate vector pointing from enemy to player
+      playerDirection = new THREE.Vector2(
+        this.modeState.playerPosition.x - enemyPos.x,
+        this.modeState.playerPosition.y - enemyPos.y
+      ).normalize();
+    } else {
+      // Fallback if player position isn't available:
+      // Calculate position based on player angle on the level edge
+      const playerAngle = this.modeState.playerAngle || 0;
+      const playerPos = {
+        x: Math.cos(playerAngle) * 10, // Assuming level radius is about 10
+        y: Math.sin(playerAngle) * 10
+      };
+      
+      playerDirection = new THREE.Vector2(
+        playerPos.x - enemyPos.x,
+        playerPos.y - enemyPos.y
+      ).normalize();
+    }
+
+    // Add a small random deviation to make it less accurate
+    const randomAngle = Math.random() * 0.2 - 0.1; // -0.1 to 0.1 radians
+    const aimAngle =
+      Math.atan2(playerDirection.y, playerDirection.x) + randomAngle;
+    const finalDirectionX = Math.cos(aimAngle);
+    const finalDirectionY = Math.sin(aimAngle);
+
+    // Bullet speed is slightly slower than player bullets
+    const bulletSpeed = 0.2;
+
+    // Add to scene and enemy bullets array
+    this.scene.add(bullet);
+
+    // Create new property in modeState if it doesn't exist
+    if (!this.modeState.enemyBullets) {
+      this.modeState.enemyBullets = [];
+    }
+
+    // Add to enemy bullets array
+    this.modeState.enemyBullets.push({
+      mesh: bullet,
+      direction: new THREE.Vector2(finalDirectionX, finalDirectionY),
+      speed: bulletSpeed,
+      fromEnemy: true,
+    });
+
+    // Debug visualization to verify bullet direction
+    // Create a small line showing the direction
+    const directionHelper = new THREE.ArrowHelper(
+      new THREE.Vector3(finalDirectionX, finalDirectionY, 0),
+      new THREE.Vector3(bullet.position.x, bullet.position.y, 0),
+      0.5,
+      0xff0000
+    );
+    this.scene.add(directionHelper);
+
+    // Remove helper after 500ms
+    setTimeout(() => {
+      this.scene.remove(directionHelper);
+    }, 500);
+
+    // Play a subtle sound for enemy fire
+    const audio = new Audio();
+    audio.volume = 0.3; // Lower volume than player shots
+    audio.src = "laser-1.mp3"; // Reuse the laser sound for now
+    audio.play();
   }
 
   // Check collision with player
@@ -352,38 +654,82 @@ export class Enemy {
     movementStyle: string;
   } {
     switch (enemyType) {
-      case 1:
-        return { hitPoints: 1, speedMultiplier: 1.0, movementStyle: "linear" };
-      case 2:
-        return { hitPoints: 2, speedMultiplier: 0.9, movementStyle: "zigzag" };
-      case 3:
+      case 0: // Standard follower - always follows spokes
+        return {
+          hitPoints: 1,
+          speedMultiplier: 1.0,
+          movementStyle: "spoke",
+        };
+
+      case 1: // Crosser - always follows spokes but crosses between them
+        return {
+          hitPoints: 2,
+          speedMultiplier: 0.9,
+          movementStyle: "spokeCrossing",
+        };
+
+      case 2: // Speeder - follows patterns but moves faster
+        return {
+          hitPoints: 2,
+          speedMultiplier: 1.5, // Faster!
+          movementStyle: "follow",
+        };
+
+      case 3: // Zigzagger - erratic zig-zag movement
+        return {
+          hitPoints: 3,
+          speedMultiplier: 1.1,
+          movementStyle: "zigzag",
+        };
+
+      case 4: // Orbiter - circular orbital movement
         return {
           hitPoints: 3,
           speedMultiplier: 0.8,
           movementStyle: "circular",
         };
-      case 4:
-        return { hitPoints: 4, speedMultiplier: 0.7, movementStyle: "linear" };
-      case 5:
-        return { hitPoints: 5, speedMultiplier: 0.6, movementStyle: "zigzag" };
-      case 6:
+
+      case 5: // Bouncer - bouncing movement pattern
+        return {
+          hitPoints: 4,
+          speedMultiplier: 1.2,
+          movementStyle: "bounce",
+        };
+
+      case 6: // Chaotic - extremely erratic movement
+        return {
+          hitPoints: 4,
+          speedMultiplier: 0.9,
+          movementStyle: "erratic",
+        };
+
+      case 7: // Hunter - attempts to home in on player
+        return {
+          hitPoints: 5,
+          speedMultiplier: 0.7,
+          movementStyle: "homing",
+        };
+
+      case 8: // Pi-follower - follows pi symbol on pi levels
         return {
           hitPoints: 6,
-          speedMultiplier: 0.5,
-          movementStyle: "circular",
+          speedMultiplier: 0.8,
+          movementStyle: "pi",
         };
-      case 7:
-        return { hitPoints: 7, speedMultiplier: 0.4, movementStyle: "linear" };
-      case 8:
-        return { hitPoints: 8, speedMultiplier: 0.3, movementStyle: "zigzag" };
-      case 9:
+
+      case 9: // Advanced Pi-follower - follows pi symbol but faster and more hit points
         return {
-          hitPoints: 9,
-          speedMultiplier: 0.2,
-          movementStyle: "circular",
+          hitPoints: 8,
+          speedMultiplier: 1.0,
+          movementStyle: "pi",
         };
-      default:
-        return { hitPoints: 1, speedMultiplier: 1.0, movementStyle: "linear" };
+
+      default: // Fallback for any unexpected enemy types
+        return {
+          hitPoints: 1,
+          speedMultiplier: 1.0,
+          movementStyle: "follow",
+        };
     }
   }
 
