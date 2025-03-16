@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GameState, ActiveModeState, Explosion } from "./types";
 import { Enemy } from "./enemy";
 import { Level, LevelType } from "./levels";
+import { SoundManager } from "./synth";
 
 // Class to handle enemy explosions at the level boundary
 class EnemyExplosion {
@@ -251,9 +252,7 @@ class EnemyExplosion {
 
   private playSound(): void {
     try {
-      const audio = new Audio("/explosion-1.mp3");
-      audio.volume = 0.5;
-      audio.play().catch((e) => console.log("Audio play failed:", e));
+      SoundManager.getInstance().playExplosion();
     } catch (error) {
       console.log("Could not play explosion sound:", error);
     }

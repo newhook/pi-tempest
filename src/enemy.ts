@@ -12,6 +12,7 @@ import {
   LinearMovementController,
 } from "./movementControllers";
 import { Level, LevelType } from "./levels";
+import { SoundManager } from "./synth";
 
 // Class representing an individual enemy
 export class Enemy {
@@ -240,8 +241,7 @@ export class Enemy {
     }
 
     // Play explosion sound
-    // const audio = new Audio("explosion-1.mp3");
-    // audio.play();
+    SoundManager.getInstance().playExplosion();
 
     this.remove();
   }
@@ -493,10 +493,7 @@ export class Enemy {
     }, 500);
 
     // Play a subtle sound for enemy fire
-    const audio = new Audio();
-    audio.volume = 0.3; // Lower volume than player shots
-    audio.src = "laser-1.mp3"; // Reuse the laser sound for now
-    audio.play();
+    SoundManager.getInstance().playEnemyLaser();
   }
 
   // Fire a bomb that explodes on contact with the level boundary
@@ -596,10 +593,7 @@ export class Enemy {
     });
 
     // Play a distinctive sound for bomb firing
-    const audio = new Audio();
-    audio.volume = 0.4;
-    audio.src = "laser-1.mp3"; // Ideally would be a different sound
-    audio.play();
+    SoundManager.getInstance().playBigExplosion();
   }
 
   // Check collision with player

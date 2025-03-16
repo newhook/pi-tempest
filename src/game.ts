@@ -7,6 +7,7 @@ import { GameMode } from "./gameMode/gameMode";
 import { MarqueeMode } from "./gameMode/marqueeMode";
 import { ActiveMode } from "./gameMode/activeMode";
 import { GameOverMode } from "./gameMode/gameOverMode";
+import { SoundManager } from "./synth";
 
 export class Game {
   // Game components
@@ -37,6 +38,9 @@ export class Game {
     // Store sceneSetup and gameState on window for access from UI component
     (window as any).sceneSetup = this.sceneSetup;
     (window as any).gameState = this.gameState;
+    
+    // Initialize sound manager
+    SoundManager.getInstance();
 
     // Set up event handlers for game status changes
     this.setupGameStatusHandlers();

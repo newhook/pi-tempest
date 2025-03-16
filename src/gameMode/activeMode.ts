@@ -8,6 +8,7 @@ import { updateScore, updateCountdownTimer } from "../ui";
 import { createPlayer, animatePlayer } from "../player";
 import { BloodMoon } from "../bloodMoon";
 import { Level, LevelType } from "../levels";
+import { SoundManager } from "../synth";
 
 export class ActiveMode implements GameMode {
   private sceneSetup: SceneSetup;
@@ -309,8 +310,7 @@ export class ActiveMode implements GameMode {
     if (this.transitionInProgress) return;
 
     // Play shooting sound
-    // const audio = new Audio("laser-1.mp3");
-    // audio.play();
+    SoundManager.getInstance().playLaser();
 
     // Create a bullet
     const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
@@ -847,6 +847,9 @@ export class ActiveMode implements GameMode {
 
     document.body.appendChild(levelCompleted);
 
+    // Play power-up/level complete sound
+    SoundManager.getInstance().playPowerUp();
+
     // Remove the text after the transition
     setTimeout(() => {
       const textElement = document.getElementById("level-completed-text");
@@ -872,6 +875,9 @@ export class ActiveMode implements GameMode {
     darkMoonText.style.opacity = "0";
     darkMoonText.style.transition = "opacity 1s ease-in-out";
     darkMoonText.id = "dark-moon-text";
+
+    // Play level start sound
+    SoundManager.getInstance().playLevelStart();
 
     document.body.appendChild(darkMoonText);
 
@@ -1174,10 +1180,7 @@ export class ActiveMode implements GameMode {
     this.sceneSetup.scene.add(particleSystem);
 
     // Play explosion sound
-    const audio = new Audio();
-    audio.src = "explosion-1.mp3";
-    audio.volume = 0.6;
-    audio.play();
+    SoundManager.getInstance().playBigExplosion();
 
     // Animate the particles
     const updateParticles = () => {
@@ -1239,10 +1242,8 @@ export class ActiveMode implements GameMode {
     warningMessage.innerHTML = "THE BLOOD MOON HAS CONSUMED YOU";
     document.body.appendChild(warningMessage);
 
-    // Play a sound effect (could be added)
-    // const audio = new Audio("explosion-1.mp3");
-    // audio.volume = 0.8;
-    // audio.play();
+    // Play blood moon sound effect
+    SoundManager.getInstance().playBloodMoonActivation();
 
     // Pause for dramatic effect, then end the game
     setTimeout(() => {
@@ -1300,7 +1301,45 @@ export class ActiveMode implements GameMode {
       case "E": // Add "E" key to return to random enemy spawning
         this.resetEnemySpawning();
         break;
+      case "m": // Add "m" key to toggle sound
+        SoundManager.getInstance().toggleMute();
+        this.showSoundStatus();
+        break;
     }
+  }
+
+  private showSoundStatus(): void {
+    const isMuted = SoundManager.getInstance().isSoundMuted();
+
+    // Create temporary message
+    const message = document.createElement("div");
+    message.textContent = isMuted ? "SOUND: OFF" : "SOUND: ON";
+    message.style.position = "absolute";
+    message.style.top = "10%";
+    message.style.left = "50%";
+    message.style.transform = "translateX(-50%)";
+    message.style.color = "#00FFFF";
+    message.style.fontFamily = "Arial, sans-serif";
+    message.style.fontSize = "24px";
+    message.style.fontWeight = "bold";
+    message.style.textShadow = "0 0 5px #00FFFF";
+    message.id = "sound-status-text";
+
+    // Remove existing message if any
+    const existingMessage = document.getElementById("sound-status-text");
+    if (existingMessage) {
+      document.body.removeChild(existingMessage);
+    }
+
+    document.body.appendChild(message);
+
+    // Remove after 1.5 seconds
+    setTimeout(() => {
+      const textElement = document.getElementById("sound-status-text");
+      if (textElement && textElement.parentNode) {
+        document.body.removeChild(textElement);
+      }
+    }, 1500);
   }
 
   public handleKeyUp(event: KeyboardEvent): void {

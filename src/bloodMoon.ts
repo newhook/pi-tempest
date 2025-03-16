@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { SoundManager } from "./synth";
 
 export class BloodMoon {
   private moonGroup: THREE.Group;
@@ -116,6 +117,11 @@ export class BloodMoon {
    * Start growing the blood moon towards the level boundary
    */
   public startGrowing(duration: number): void {
+    // Play blood moon sound when growing starts (for longer durations only)
+    if (duration > 10) {
+      SoundManager.getInstance().playBloodMoonActivation();
+    }
+
     this.growthDuration = duration * 1000; // Convert seconds to milliseconds
     this.isGrowing = true;
     this.growthStart = Date.now();
