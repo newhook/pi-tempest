@@ -1245,12 +1245,18 @@ export class ActiveMode implements GameMode {
     warningMessage.style.top = "30%";
     warningMessage.style.left = "50%";
     warningMessage.style.transform = "translate(-50%, -50%)";
-    warningMessage.style.color = "#FF0000";
+    warningMessage.style.color = "#FFFFFF"; // White text for better visibility
     warningMessage.style.fontFamily = "Arial, sans-serif";
     warningMessage.style.fontSize = "48px";
     warningMessage.style.fontWeight = "bold";
     warningMessage.style.textAlign = "center";
-    warningMessage.style.textShadow = "0 0 10px #FF0000";
+    warningMessage.style.textShadow = "0 0 15px #FF0000, 0 0 25px #FF0000"; // Stronger glow
+    warningMessage.style.background = "rgba(139, 0, 0, 0.5)"; // Semi-transparent dark red background
+    warningMessage.style.padding = "20px 30px";
+    warningMessage.style.borderRadius = "10px";
+    warningMessage.style.border = "2px solid #FF0000";
+    warningMessage.style.boxShadow = "0 0 30px rgba(255, 0, 0, 0.8)"; // Red outer glow
+    warningMessage.style.letterSpacing = "2px"; // Spread out text for readability
     warningMessage.innerHTML = "THE BLOOD MOON HAS CONSUMED YOU";
     document.body.appendChild(warningMessage);
 
