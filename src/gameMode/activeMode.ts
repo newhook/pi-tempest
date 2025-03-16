@@ -15,7 +15,7 @@ export class ActiveMode implements GameMode {
   private player: THREE.Group;
   private enemyManager: EnemyManager;
   private clock: THREE.Clock;
-  private lastEnemyTime: number = 0;
+  private nextEnemyTime: number = 0;
   private level!: Level;
   private levelRadius: number = 10;
   private bloodMoon: BloodMoon;
@@ -82,7 +82,7 @@ export class ActiveMode implements GameMode {
     updateCountdownTimer(60);
 
     // Reset enemy spawn timer to start spawning enemies
-    this.lastEnemyTime = this.clock.getElapsedTime();
+    this.nextEnemyTime = this.clock.getElapsedTime();
 
     // Reset enemy spawning to random (not forced) when starting
     this.modeState.forcedEnemyType = undefined;
@@ -138,11 +138,13 @@ export class ActiveMode implements GameMode {
     // Create new enemies periodically if enemy spawning is enabled
     if (
       this.modeState.spawnEnemies &&
-      elapsedTime - this.lastEnemyTime > 1.5 &&
+      elapsedTime >= this.nextEnemyTime &&
       !this.transitionInProgress
     ) {
       this.enemyManager.createEnemy(this.level);
-      this.lastEnemyTime = elapsedTime;
+
+      const nextTime = 0.5 + 0.5 * (this.bloodMoon.getRemainingTime() / 60);
+      this.nextEnemyTime = elapsedTime + 0.5 + Math.random() * nextTime;
     }
 
     // Update enemies

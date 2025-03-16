@@ -13,7 +13,7 @@ class EnemyExplosion {
   private rings: THREE.Mesh[] = [];
   private light: THREE.PointLight;
   private explosionRadius: number = 2.0;
-  private duration: number = 2000; // Duration in ms
+  private duration: number = 500; // Duration in ms
   private numRings: number = 5; // Number of concentric circles
 
   constructor(

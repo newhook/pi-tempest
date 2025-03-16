@@ -622,77 +622,77 @@ export class Enemy {
         return {
           hitPoints: 1,
           speedMultiplier: 1.0,
-          points: 5,
+          points: 10,
         };
 
       case 1: // Crosser - always follows spokes but crosses between them
         return {
           hitPoints: 2,
           speedMultiplier: 0.9,
-          points: 7,
+          points: 15,
         };
 
       case 2: // Speeder - follows patterns but moves faster
         return {
           hitPoints: 2,
           speedMultiplier: 1.5, // Faster!
-          points: 10,
+          points: 20,
         };
 
       case 3: // Zigzagger - erratic zig-zag movement
         return {
           hitPoints: 3,
           speedMultiplier: 1.1,
-          points: 15,
+          points: 30,
         };
 
       case 4: // Orbiter - circular orbital movement
         return {
           hitPoints: 3,
           speedMultiplier: 0.8,
-          points: 20,
+          points: 40,
         };
 
       case 5: // Bouncer - bouncing movement pattern
         return {
           hitPoints: 4,
           speedMultiplier: 1.2,
-          points: 15,
+          points: 30,
         };
 
       case 6: // Chaotic - extremely erratic movement
         return {
           hitPoints: 4,
           speedMultiplier: 0.9,
-          points: 20,
+          points: 40,
         };
 
       case 7: // Hunter - attempts to home in on player
         return {
           hitPoints: 5,
           speedMultiplier: 0.7,
-          points: 10,
+          points: 20,
         };
 
       case 8: // Pi-follower - follows pi symbol on pi levels
         return {
           hitPoints: 6,
           speedMultiplier: 0.8,
-          points: 25,
+          points: 50,
         };
 
       case 9: // Advanced Pi-follower - follows pi symbol but faster and more hit points
         return {
           hitPoints: 8,
           speedMultiplier: 1.0,
-          points: 30,
+          points: 60,
         };
 
       case 10:
         return {
           hitPoints: 1,
           speedMultiplier: 3.0,
-          points: 1,
+          points: 5,
         };
 
       default: // Fallback for any unexpected enemy types
