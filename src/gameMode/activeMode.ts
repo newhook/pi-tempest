@@ -72,6 +72,19 @@ export class ActiveMode implements GameMode {
   public getPlayer(): THREE.Group {
     return this.player;
   }
+  
+  // Show UI elements when entering active mode
+  private showUIElements(): void {
+    // Show score, lives, level, and timer displays
+    const elementsToShow = ['score', 'lives', 'level', 'countdown-timer'];
+    
+    elementsToShow.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.style.display = 'block';
+      }
+    });
+  }
 
   public enter(): void {
     this.level = new Level(this.gameState.currentLevel, this.levelRadius);
@@ -84,6 +97,9 @@ export class ActiveMode implements GameMode {
     this.bloodMoon.setLevelRadius(this.levelRadius);
     this.bloodMoon.enter();
 
+    // Show all UI elements that might have been hidden in the marquee mode
+    this.showUIElements();
+
     // Immediately start the blood moon growing (this will be invisible at first)
     this.bloodMoon.startGrowing(maxLevelTime);
 
@@ -92,6 +108,9 @@ export class ActiveMode implements GameMode {
 
     // Initialize or update the lives display
     updateLives(this.gameState);
+    
+    // Update the score display
+    updateScore(this.gameState);
 
     // Start background music
     SoundManager.getInstance().startBackgroundMusic();
@@ -100,7 +119,7 @@ export class ActiveMode implements GameMode {
     if (this.gameState.currentLevel === 1) {
       this.showLevelStartText();
     }
-
+    
     // Reset rotation direction change timer for Pi symbol level
     this.piLevelRotationDirection = Math.random() < 0.5 ? 1 : -1; // Random initial direction
     this.nextDirectionChangeTime =
@@ -113,7 +132,6 @@ export class ActiveMode implements GameMode {
     this.modeState.forcedEnemyType = undefined;
 
     // Set up player movement based on keys
-    // Update player angle based on keys in animation loop
     this.keyMovementInterval = window.setInterval(() => {
       const moveSpeed = 0.1;
 

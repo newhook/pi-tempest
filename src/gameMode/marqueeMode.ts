@@ -94,6 +94,9 @@ export class MarqueeMode implements GameMode {
     document.body.appendChild(this.marqueeContainer);
     this.bloodMoon.enter();
 
+    // Hide UI elements that shouldn't appear on the marquee screen
+    this.hideUIElements();
+
     // Set up the Blood Moon for marquee mode
     // Move it to a visible position (slightly to the side for better aesthetics)
     this.bloodMoon.getGroup().position.set(-8, -5, -20);
@@ -103,6 +106,19 @@ export class MarqueeMode implements GameMode {
 
     // Start the pulsation timer
     this.startBloodMoonAnimation();
+  }
+  
+  // Hide UI elements on marquee screen
+  private hideUIElements(): void {
+    // Hide score, lives, level, and timer displays
+    const elementsToHide = ['score', 'lives', 'level', 'countdown-timer'];
+    
+    elementsToHide.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.style.display = 'none';
+      }
+    });
   }
 
   public update(delta: number): void {
