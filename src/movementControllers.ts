@@ -50,6 +50,10 @@ export class SpokeCrossingMovementController extends BaseMovementController {
     if (!enemy.spokeCrossingSpeed) {
       enemy.spokeCrossingSpeed = 0.01 + Math.random() * 0.03;
     }
+    
+    // Note: The numSpokes is handled in the Enemy.update method and doesn't
+    // need to be initialized here. The controller will get the correct
+    // numSpokes value in each update call.
   }
   
   update(delta: number, levelRadius: number, numSpokes: number): { x: number; y: number; angle: number; } {
@@ -94,10 +98,14 @@ export class ZigzagMovementController extends BaseMovementController {
   initialize(enemy: Enemy, params?: any): void {
     super.initialize(enemy);
     
+    // Get a valid spoke count - use enemy's numSpokes or a default value
+    // The actual numSpokes will be correctly set during the first update call
+    const numSpokes = enemy.numSpokes || 8;
+    
     // Initialize zigzag state
     this.zigzagState = {
       // Current spoke index
-      currentSpoke: Math.floor(Math.random() * params.numSpokes),
+      currentSpoke: Math.floor(Math.random() * numSpokes),
       // Target spoke (where we're moving to)
       targetSpoke: null,
       // Progress along the transition (0-1)

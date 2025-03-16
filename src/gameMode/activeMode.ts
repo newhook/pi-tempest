@@ -6,7 +6,7 @@ import { EnemyManager } from "../enemies";
 import { updateScore } from "../ui";
 import { createPlayer, animatePlayer } from "../player";
 import { BloodMoon } from "../bloodMoon";
-import { createLevel } from "../levels";
+import { Level, LevelType } from "../levels";
 
 export class ActiveMode implements GameMode {
   private sceneSetup: SceneSetup;
@@ -15,9 +15,9 @@ export class ActiveMode implements GameMode {
   private enemyManager: EnemyManager;
   private clock: THREE.Clock;
   private lastEnemyTime: number = 0;
-  private level!: THREE.Group;
+  private level!: Level;
   private levelRadius: number = 10;
-  private currentLevelType: string = "circle";
+  private currentLevelType: LevelType = LevelType.Circle;
   private bloodMoon: BloodMoon;
   private transitionInProgress: boolean = false;
   private keys = {
@@ -64,8 +64,8 @@ export class ActiveMode implements GameMode {
   }
 
   public enter(): void {
-    this.level = createLevel(this.gameState.currentLevel, this.levelRadius);
-    this.sceneSetup.scene.add(this.level);
+    this.level = new Level(this.gameState.currentLevel, this.levelRadius);
+    this.sceneSetup.scene.add(this.level.getGroup());
 
     // Ensure player is in the scene
     this.sceneSetup.scene.add(this.player);
@@ -74,9 +74,6 @@ export class ActiveMode implements GameMode {
     setTimeout(() => {
       this.bloodMoon.fadeOut();
     }, 2000);
-
-    // Make player visible
-    this.player.visible = true;
 
     // Reset enemy spawn timer to start spawning enemies
     this.lastEnemyTime = this.clock.getElapsedTime();
@@ -118,28 +115,20 @@ export class ActiveMode implements GameMode {
 
     // Update player bullets
     this.updateBullets(delta);
-    
+
     // Update enemy bullets
     this.updateEnemyBullets(delta);
 
     // Check for enemy-bullet collisions
     this.checkBulletCollisions();
-    
-    // Check if player is hit by enemy bullets (only if ghost mode is not active)
-    if (!this.modeState.ghostMode && !this.transitionInProgress && this.checkPlayerHitByEnemyBullets()) {
-      document.dispatchEvent(
-        new CustomEvent("gameStatusChanged", {
-          detail: { status: "gameOver" },
-        })
-      );
-      return;
-    }
 
-    // Check for player-enemy collisions (only if ghost mode is not active and not during transition)
+    // Check for player-enemy or if player is hit by enemy bullets (only if ghost mode is not active, and not
+    // in transition)
     if (
       !this.modeState.ghostMode &&
       !this.transitionInProgress &&
-      this.enemyManager.checkPlayerCollision(this.player)
+      (this.enemyManager.checkPlayerCollision(this.player) ||
+        this.checkPlayerHitByEnemyBullets())
     ) {
       document.dispatchEvent(
         new CustomEvent("gameStatusChanged", {
@@ -157,11 +146,11 @@ export class ActiveMode implements GameMode {
       this.modeState.playerAngle
     );
     this.player.position.set(playerPosition.x, playerPosition.y, 0);
-    
+
     // Store current player position in modeState for enemy targeting
-    this.modeState.playerPosition = { 
-      x: playerPosition.x, 
-      y: playerPosition.y 
+    this.modeState.playerPosition = {
+      x: playerPosition.x,
+      y: playerPosition.y,
     };
 
     // Point player toward center
@@ -186,7 +175,7 @@ export class ActiveMode implements GameMode {
       this.sceneSetup.scene.remove(bullet.mesh);
     }
     this.modeState.bullets = [];
-    
+
     // Remove all enemy bullets
     for (const bullet of this.modeState.enemyBullets) {
       this.sceneSetup.scene.remove(bullet.mesh);
@@ -194,11 +183,8 @@ export class ActiveMode implements GameMode {
     this.modeState.enemyBullets = [];
 
     // Remove level if it exists
-    if (this.level) {
-      this.sceneSetup.scene.remove(this.level);
-    }
+    this.sceneSetup.scene.remove(this.level.getGroup());
 
-    // Immediately remove the blood moon if it exists
     this.bloodMoon.exit();
 
     // Cancel any ongoing key movement interval
@@ -210,7 +196,7 @@ export class ActiveMode implements GameMode {
 
   public shoot(): void {
     // Don't shoot if in transition or player doesn't exist
-    if (this.transitionInProgress || !this.player) return;
+    if (this.transitionInProgress) return;
 
     // Play shooting sound
     // const audio = new Audio("laser-1.mp3");
@@ -274,14 +260,15 @@ export class ActiveMode implements GameMode {
     this.gameState.currentLevel++;
 
     // Remove old level
-    this.sceneSetup.scene.remove(this.level);
+    this.sceneSetup.scene.remove(this.level.getGroup());
 
     // Create new level
-    this.level = createLevel(this.gameState.currentLevel, this.levelRadius);
-    this.sceneSetup.scene.add(this.level);
+    this.level = new Level(this.gameState.currentLevel, this.levelRadius);
+    this.sceneSetup.scene.add(this.level.getGroup());
 
     // Update the current level type
-    this.currentLevelType = this.getLevelType(this.gameState.currentLevel);
+    this.currentLevelType = ((this.gameState.currentLevel - 1) %
+      5) as LevelType;
 
     // Reset player position to level outline
     const playerPosition = this.getPositionOnLevelOutline(
@@ -378,36 +365,21 @@ export class ActiveMode implements GameMode {
     }
   }
 
-  private getLevelType(levelNumber: number): string {
-    switch ((levelNumber - 1) % 5) {
-      case 0:
-        return "circle";
-      case 1:
-        return "spiral";
-      case 2:
-        return "star";
-      case 3:
-        return "wave";
-      case 4:
-        return "pi";
-      default:
-        return "circle";
-    }
-  }
+  // The getLevelType method is no longer needed as we use the LevelType enum directly
 
   private getPositionOnLevelOutline(angle: number): { x: number; y: number } {
     let x: number, y: number;
 
     switch (this.currentLevelType) {
-      case "circle":
-      case "spiral":
-      case "pi":
+      case LevelType.Circle:
+      case LevelType.Spiral:
+      case LevelType.PiSymbol:
         // Simple circle
         x = Math.cos(angle) * this.levelRadius;
         y = Math.sin(angle) * this.levelRadius;
         break;
 
-      case "star":
+      case LevelType.Star:
         // Star level - calculate radius based on angle
         const starPoints = 3 + (this.gameState.currentLevel % 5);
         // Calculate how many vertices the star has (points * 2 for both inner and outer points)
@@ -440,7 +412,7 @@ export class ActiveMode implements GameMode {
         y = startY + (endY - startY) * sectionProgress;
         break;
 
-      case "wave":
+      case LevelType.Wave:
         // Wave level - adjust radius based on sine wave
         const amplitude = this.levelRadius * 0.05;
         const waveRadius =
@@ -480,7 +452,7 @@ export class ActiveMode implements GameMode {
       }
     }
   }
-  
+
   // Update enemy bullets
   private updateEnemyBullets(delta: number): void {
     for (let i = this.modeState.enemyBullets.length - 1; i >= 0; i--) {
@@ -502,35 +474,33 @@ export class ActiveMode implements GameMode {
       }
     }
   }
-  
+
   // Check if player is hit by any enemy bullets
   private checkPlayerHitByEnemyBullets(): boolean {
-    if (!this.player) return false;
-    
     // Get player position
     const playerPos = this.player.position;
     const playerRadius = this.modeState.playerSize * 0.8; // Same collision radius as used for enemies
-    
+
     // Check each enemy bullet for collision with player
     for (let i = this.modeState.enemyBullets.length - 1; i >= 0; i--) {
       const bullet = this.modeState.enemyBullets[i];
-      
+
       // Calculate distance between bullet and player
       const dx = playerPos.x - bullet.mesh.position.x;
       const dy = playerPos.y - bullet.mesh.position.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      
+
       // Check for collision (bullet radius is approximately 0.15)
       if (distance < playerRadius + 0.15) {
         // Remove the bullet
         this.sceneSetup.scene.remove(bullet.mesh);
         this.modeState.enemyBullets.splice(i, 1);
-        
+
         // Player is hit!
         return true;
       }
     }
-    
+
     return false; // No collision detected
   }
 

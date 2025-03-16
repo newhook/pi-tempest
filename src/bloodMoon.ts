@@ -69,10 +69,6 @@ export class BloodMoon {
     this.animate();
   }
 
-  public enter(): void {
-    this.scene.add(this.moonGroup);
-  }
-
   /**
    * Move the blood moon to the center of the level and resize it
    * @param levelRadius The radius of the current level
@@ -211,11 +207,11 @@ export class BloodMoon {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
     }
-    
+
     // Remove from scene
     this.scene.remove(this.moonGroup);
   }
-  
+
   /**
    * Reset the blood moon to its original state
    * Call this when re-entering a mode after the moon has been faded out
@@ -224,43 +220,43 @@ export class BloodMoon {
     // Reset flags
     this.isFadingOut = false;
     this.isShrinking = false;
-    
+
     // Reset group position to original position
     const levelRadius = 10; // Default level radius
     this.moonGroup.position.set(levelRadius * 0.72, levelRadius * 0.72, 0);
-    
+
     // Reset scale
     this.moonGroup.scale.set(1, 1, 1);
-    
+
     // Reset opacities
     this.moonMaterial.opacity = 0.9;
     this.glowMaterial.opacity = 0.25;
-    
+
     // Reset crater opacities
     this.craters.forEach((crater) => {
       (crater.material as THREE.MeshBasicMaterial).opacity = 0.8;
     });
-    
+
     // Restart the animation if needed
     if (!this.animationFrame) {
       this.animationFrame = requestAnimationFrame(() => this.animate());
     }
   }
-  
+
   /**
    * Get the moon group for attaching to the scene
    */
   public getGroup(): THREE.Group {
     return this.moonGroup;
   }
-  
+
   /**
    * Enter the scene - called when the active mode enters
    */
   public enter(): void {
     // Reset the blood moon
     this.reset();
-    
+
     // Add to scene
     this.scene.add(this.moonGroup);
   }

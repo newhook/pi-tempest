@@ -67,13 +67,16 @@ export class Enemy {
     // Create the appropriate movement controller based on movement style
     this.movementController = createMovementController(movementStyle);
 
-    // Initialize the controller with this enemy and any needed parameters
-    this.movementController.initialize(this, { numSpokes: this.numSpokes });
+    // Initialize the controller with this enemy
+    // Note: The numSpokes from enemy is already accessible to the controller
+    // and will be properly set during the first update call
+    this.movementController.initialize(this);
   }
 
   // Update enemy position based on movement style
   update(delta: number, levelRadius: number, numSpokes: number = 8): void {
-    // Store number of spokes for movement
+    // Store level's number of spokes for movement
+    // This will be used in subsequent movement controller updates
     this.numSpokes = numSpokes;
 
     // Increment distance from center for all movement types
