@@ -4,7 +4,7 @@ import { GameMode } from "./gameMode";
 import { SceneSetup } from "../scene";
 import { EnemyManager } from "../enemies";
 import { Enemy } from "../enemy";
-import { updateScore } from "../ui";
+import { updateScore, updateCountdownTimer } from "../ui";
 import { createPlayer, animatePlayer } from "../player";
 import { BloodMoon } from "../bloodMoon";
 import { Level, LevelType } from "../levels";
@@ -72,10 +72,20 @@ export class ActiveMode implements GameMode {
     // Ensure player is in the scene
     this.sceneSetup.scene.add(this.player);
 
+    // Configure the blood moon with the current level's radius
+    this.bloodMoon.setLevelRadius(this.levelRadius);
     this.bloodMoon.enter();
+    
+    // Immediately start the blood moon growing (this will be invisible at first)
+    this.bloodMoon.startGrowing();
+    
+    // Show the initial countdown time of 60 seconds
+    updateCountdownTimer(60);
+    
+    // Fade in the blood moon after entering the level
     setTimeout(() => {
-      this.bloodMoon.fadeOut();
-    }, 2000);
+      this.bloodMoon.fadeIn();
+    }, 500);
 
     // Reset enemy spawn timer to start spawning enemies
     this.lastEnemyTime = this.clock.getElapsedTime();
@@ -108,6 +118,28 @@ export class ActiveMode implements GameMode {
 
   public update(delta: number): void {
     const elapsedTime = this.clock.getElapsedTime();
+
+    // Get remaining time and update the countdown timer
+    if (!this.transitionInProgress) {
+      const remainingSeconds = this.bloodMoon.getRemainingTime();
+      updateCountdownTimer(remainingSeconds);
+      
+      // Check if time has run out (and not in ghost mode)
+      if (remainingSeconds <= 0 && !this.modeState.ghostMode) {
+        this.handleBloodMoonReachedBoundary();
+        return;
+      }
+    }
+
+    // Check if the blood moon has reached the level boundary (backup check)
+    if (!this.transitionInProgress && !this.modeState.ghostMode) {
+      const moonProgress = this.bloodMoon.getGrowthProgress();
+      if (moonProgress >= 0.99) {
+        // Moon has reached the boundary, end the game if the player hasn't cleared the level
+        this.handleBloodMoonReachedBoundary();
+        return;
+      }
+    }
 
     // Create new enemies periodically if enemy spawning is enabled
     if (
@@ -252,18 +284,59 @@ export class ActiveMode implements GameMode {
 
     // Destroy all enemies
     this.destroyAllEnemies();
-
-    // Move the blood moon to the center and expand it to fill the level
-    this.bloodMoon.enter();
-    this.bloodMoon.moveToCenter(this.levelRadius);
-
-    // Wait for the blood moon to expand
-    await this.delay(1000);
-
-    // Start the blood moon shrinking animation
+    
+    // Stop any existing Blood Moon animations but keep it where it is
+    // We'll make it expand to fill the screen
+    
+    // Get the current Blood Moon scale and position
+    const currentScale = this.bloodMoon.getGroup().scale.x;
+    
+    // Setup a quick grow animation to expand the Blood Moon to fill the level
+    const expandBloodMoon = async (): Promise<void> => {
+      // Calculate target scale to fill the level
+      const targetScale = this.levelRadius / 2.0; // Larger than before to ensure it fills the screen
+      const duration = 1500; // 1.5 seconds for expansion
+      const startTime = Date.now();
+      
+      return new Promise<void>((resolve) => {
+        const animateExpand = () => {
+          const elapsed = Date.now() - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          
+          // Ease-out function for dramatic effect
+          const easedProgress = 1 - Math.pow(1 - progress, 3);
+          
+          // Scale the Blood Moon to grow larger
+          const newScale = currentScale + (targetScale - currentScale) * easedProgress;
+          this.bloodMoon.getGroup().scale.set(newScale, newScale, 1);
+          
+          if (progress < 1) {
+            requestAnimationFrame(animateExpand);
+          } else {
+            resolve();
+          }
+          
+          // Keep rendering during animation
+          this.sceneSetup.renderer.render(
+            this.sceneSetup.scene,
+            this.sceneSetup.camera
+          );
+        };
+        
+        animateExpand();
+      });
+    };
+    
+    // First, grow the Blood Moon to its maximum size
+    await expandBloodMoon();
+    
+    // Wait a brief moment at maximum size for dramatic effect
+    await this.delay(500);
+    
+    // Now start the Blood Moon collapsing animation
     this.bloodMoon.startShrinking();
-
-    // Fly the player ship to the blood moon (center)
+    
+    // Fly the player ship to the blood moon (center) as it collapses
     await this.flyPlayerToBloodMoon();
 
     // Reset enemy spawning to random when advancing level
@@ -294,8 +367,15 @@ export class ActiveMode implements GameMode {
     // Add a brief delay before ending the transition
     await this.delay(500);
 
-    // Fade out the blood moon
-    this.bloodMoon.fadeOut();
+    // Reset the Blood Moon for the new level
+    this.bloodMoon.exit(); // Remove the old Blood Moon from the scene
+    this.bloodMoon = new BloodMoon(this.sceneSetup.scene); // Create a fresh Blood Moon
+    this.bloodMoon.setLevelRadius(this.levelRadius); // Set its radius
+    this.bloodMoon.enter(); // Add it to the scene
+    this.bloodMoon.startGrowing(); // Start its growth cycle
+    
+    // Reset the countdown timer for the new level
+    updateCountdownTimer(60);
 
     // Give a brief period of invulnerability after level change
     this.modeState.ghostMode = true;
@@ -752,11 +832,18 @@ export class ActiveMode implements GameMode {
   }
 
   private async flyPlayerToBloodMoon(): Promise<void> {
-    const duration = 1500; // 1.5 seconds
+    const duration = 2000; // Longer duration (2 seconds) to match with Blood Moon collapse
     const startPosition = {
       x: this.player.position.x,
       y: this.player.position.y,
       z: this.player.position.z,
+    };
+
+    // Add a small rotation effect as the player flies in
+    const startRotation = {
+      x: this.player.rotation.x,
+      y: this.player.rotation.y,
+      z: this.player.rotation.z,
     };
 
     return new Promise<void>((resolve) => {
@@ -766,26 +853,65 @@ export class ActiveMode implements GameMode {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
 
-        // Easing function for smooth animation
-        const easeProgress =
-          progress < 0.5
-            ? 2 * progress * progress
-            : -1 + (4 - 2 * progress) * progress;
+        // Custom easing function for dramatic flight
+        // Starts slow, accelerates, then slows at the end
+        const easeProgress = 
+          progress < 0.3 
+            ? 3 * progress * progress 
+            : progress > 0.7 
+              ? 1 - Math.pow(-2 * progress + 2, 2) / 2
+              : 0.27 + (progress - 0.3) * 1.15; // Linear in middle section
 
         // Move player toward center of screen (where blood moon is)
         this.player.position.x = startPosition.x * (1 - easeProgress);
         this.player.position.y = startPosition.y * (1 - easeProgress);
-        this.player.position.z = startPosition.z + easeProgress * 2; // Move slightly forward
+        this.player.position.z = startPosition.z + easeProgress * 3; // Move more forward for dramatic effect
+
+        // Add slight rotation as player flies in (barrel roll effect)
+        const rotationEffect = Math.sin(progress * Math.PI * 4) * 0.15;
+        this.player.rotation.z = startRotation.z + rotationEffect;
 
         // Shrink player as it approaches center
-        const scale = 1 - easeProgress * 0.5;
+        const scale = 1 - easeProgress * 0.6;
         this.player.scale.set(scale, scale, scale);
+
+        // Add a slight color effect to the player (gets redder as it approaches the Blood Moon)
+        this.player.traverse((object) => {
+          if (object instanceof THREE.Mesh && object.material) {
+            const material = object.material as THREE.MeshBasicMaterial;
+            if (material && material.color) {
+              // Store original color if not already stored
+              if (!object.userData.originalColor) {
+                object.userData.originalColor = material.color.clone();
+              }
+              
+              // Apply red tint
+              material.color.setRGB(
+                1, // Full red
+                1 - easeProgress * 0.7, // Reduce green
+                1 - easeProgress * 0.7  // Reduce blue
+              );
+            }
+          }
+        });
 
         if (progress < 1) {
           requestAnimationFrame(animate);
         } else {
-          // Reset player scale
+          // Reset player scale and rotation
           this.player.scale.set(1, 1, 1);
+          this.player.rotation.set(startRotation.x, startRotation.y, startRotation.z);
+          
+          // Reset player color to original
+          this.player.traverse((object) => {
+            if (object instanceof THREE.Mesh && object.material) {
+              const material = object.material as THREE.MeshBasicMaterial;
+              if (material && material.color && object.userData.originalColor) {
+                material.color.copy(object.userData.originalColor);
+              }
+            }
+          });
+          
           resolve();
         }
 
@@ -802,6 +928,43 @@ export class ActiveMode implements GameMode {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  
+  // Handle when the blood moon reaches the level boundary
+  private handleBloodMoonReachedBoundary(): void {
+    // Show a warning message
+    const warningMessage = document.createElement("div");
+    warningMessage.id = "blood-moon-warning";
+    warningMessage.style.position = "absolute";
+    warningMessage.style.top = "30%";
+    warningMessage.style.left = "50%";
+    warningMessage.style.transform = "translate(-50%, -50%)";
+    warningMessage.style.color = "#FF0000";
+    warningMessage.style.fontFamily = "Arial, sans-serif";
+    warningMessage.style.fontSize = "48px";
+    warningMessage.style.fontWeight = "bold";
+    warningMessage.style.textAlign = "center";
+    warningMessage.style.textShadow = "0 0 10px #FF0000";
+    warningMessage.innerHTML = "THE BLOOD MOON HAS CONSUMED YOU";
+    document.body.appendChild(warningMessage);
+    
+    // Play a sound effect (could be added)
+    // const audio = new Audio("explosion-1.mp3");
+    // audio.volume = 0.8;
+    // audio.play();
+    
+    // Pause for dramatic effect, then end the game
+    setTimeout(() => {
+      // Remove the warning message
+      document.body.removeChild(warningMessage);
+      
+      // Trigger game over
+      document.dispatchEvent(
+        new CustomEvent("gameStatusChanged", {
+          detail: { status: "gameOver" },
+        })
+      );
+    }, 2000);
   }
 
   private updatePlayerAngle(targetAngle: number): void {

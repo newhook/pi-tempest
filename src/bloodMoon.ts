@@ -9,12 +9,17 @@ export class BloodMoon {
 
   // Animation properties
   private isFadingOut: boolean = false;
+  private isFadingIn: boolean = false;
   private fadeStart: number = 0;
-  private fadeDuration: number = 2000; // 2 seconds fade-out
+  private fadeDuration: number = 2000; // 2 seconds fade duration
   private animationFrame: number | null = null;
   private isShrinking: boolean = false;
+  private isGrowing: boolean = false;
+  private growthStart: number = 0;
+  private growthDuration: number = 60000; // 60 seconds to grow to level boundary
   private shrinkStart: number = 0;
-  private shrinkDuration: number = 1500; // 1.5 seconds to shrink
+  private shrinkDuration: number = 2000; // 2 seconds to shrink (matching player flight)
+  private levelRadius: number = 10; // Default level radius
 
   // Materials for opacity control
   private moonMaterial: THREE.MeshBasicMaterial;
@@ -25,15 +30,15 @@ export class BloodMoon {
     this.moonGroup = new THREE.Group();
 
     // Parameters
-    const levelRadius = 10; // Match the game's circular level radius
+    this.levelRadius = 10; // Match the game's circular level radius
     const moonSize = 3.2; // Size of the moon
     const moonPosition = {
-      x: levelRadius * 0.72,
-      y: levelRadius * 0.72,
+      x: 0, // Center position
+      y: 0, // Center position
       z: -10,
-    }; // Position at edge of level
+    };
 
-    // Set up the moon group position
+    // Set up the moon group position at the center
     this.moonGroup.position.set(moonPosition.x, moonPosition.y, 0);
 
     // Create the main moon disc
@@ -41,7 +46,7 @@ export class BloodMoon {
     this.moonMaterial = new THREE.MeshBasicMaterial({
       color: 0xaa0000, // Deep red base color
       transparent: true,
-      opacity: 0.9,
+      opacity: 0, // Start invisible and fade in
     });
     this.moon = new THREE.Mesh(moonGeometry, this.moonMaterial);
     this.moon.position.set(0, 0, moonPosition.z); // Position relative to group
@@ -52,7 +57,7 @@ export class BloodMoon {
     this.glowMaterial = new THREE.MeshBasicMaterial({
       color: 0xff3333, // Brighter red for the glow
       transparent: true,
-      opacity: 0.25,
+      opacity: 0, // Start invisible and fade in
       blending: THREE.AdditiveBlending,
     });
     this.glow = new THREE.Mesh(glowGeometry, this.glowMaterial);
@@ -60,6 +65,15 @@ export class BloodMoon {
 
     // Create surface details (craters)
     this.createCraters(moonSize);
+
+    // Make craters initially invisible
+    this.craters.forEach(crater => {
+      const material = crater.material as THREE.MeshBasicMaterial;
+      material.opacity = 0;
+    });
+
+    // Set the initial scale (start small)
+    this.moonGroup.scale.set(0.1, 0.1, 1);
 
     // Add moon and glow to the group
     this.moonGroup.add(this.glow);
@@ -188,6 +202,16 @@ export class BloodMoon {
   }
 
   /**
+   * Fade in the blood moon
+   */
+  public fadeIn(): void {
+    if (!this.isFadingIn) {
+      this.isFadingIn = true;
+      this.fadeStart = Date.now();
+    }
+  }
+
+  /**
    * Fade out the blood moon
    */
   public fadeOut(): void {
@@ -195,6 +219,46 @@ export class BloodMoon {
       this.isFadingOut = true;
       this.fadeStart = Date.now();
     }
+  }
+  
+  /**
+   * Start growing the blood moon towards the level boundary
+   */
+  public startGrowing(): void {
+    if (!this.isGrowing) {
+      this.isGrowing = true;
+      this.growthStart = Date.now();
+    }
+  }
+  
+  /**
+   * Get the current scale of the blood moon relative to the level radius
+   * Returns a value between 0 and 1, where 1 means the moon has reached the level boundary
+   */
+  public getGrowthProgress(): number {
+    if (!this.isGrowing) {
+      return 0;
+    }
+    
+    const currentScale = this.moonGroup.scale.x;
+    const targetScale = this.levelRadius / 3.2; // Based on original moon size
+    
+    return Math.min(1, currentScale / targetScale);
+  }
+  
+  /**
+   * Get the remaining time in seconds before the blood moon reaches the boundary
+   * Returns a value between 0 and the total growth duration in seconds
+   */
+  public getRemainingTime(): number {
+    if (!this.isGrowing) {
+      return this.growthDuration / 1000; // Return full duration if not growing yet
+    }
+    
+    const elapsedTime = Date.now() - this.growthStart;
+    const remainingTime = Math.max(0, this.growthDuration - elapsedTime);
+    
+    return Math.ceil(remainingTime / 1000); // Return seconds, rounded up
   }
 
   /**
@@ -213,34 +277,46 @@ export class BloodMoon {
   }
 
   /**
-   * Reset the blood moon to its original state
-   * Call this when re-entering a mode after the moon has been faded out
+   * Reset the blood moon to its initial state at the center
+   * Call this when entering a new level
    */
   public reset(): void {
     // Reset flags
     this.isFadingOut = false;
+    this.isFadingIn = false;
     this.isShrinking = false;
+    this.isGrowing = false;
 
-    // Reset group position to original position
-    const levelRadius = 10; // Default level radius
-    this.moonGroup.position.set(levelRadius * 0.72, levelRadius * 0.72, 0);
+    // Reset group position to center
+    this.moonGroup.position.set(0, 0, 0);
 
-    // Reset scale
-    this.moonGroup.scale.set(1, 1, 1);
+    // Reset to starting scale - slightly larger so it's visible when it fades in
+    this.moonGroup.scale.set(0.2, 0.2, 1);
 
-    // Reset opacities
-    this.moonMaterial.opacity = 0.9;
-    this.glowMaterial.opacity = 0.25;
+    // Reset opacities to invisible
+    this.moonMaterial.opacity = 0;
+    this.glowMaterial.opacity = 0;
 
     // Reset crater opacities
     this.craters.forEach((crater) => {
-      (crater.material as THREE.MeshBasicMaterial).opacity = 0.8;
+      (crater.material as THREE.MeshBasicMaterial).opacity = 0;
     });
+    
+    // Reset colors to default
+    this.moonMaterial.color.setRGB(0.67, 0, 0); // Reset to default deep red
+    this.glowMaterial.color.setRGB(1, 0.2, 0.2); // Reset to default glow
 
     // Restart the animation if needed
     if (!this.animationFrame) {
       this.animationFrame = requestAnimationFrame(() => this.animate());
     }
+  }
+  
+  /**
+   * Set the level radius for growth calculations
+   */
+  public setLevelRadius(radius: number): void {
+    this.levelRadius = radius;
   }
 
   /**
@@ -267,8 +343,27 @@ export class BloodMoon {
   private animate(): void {
     const time = Date.now() * 0.001;
 
-    if (this.isFadingOut) {
-      // Calculate fade progress
+    if (this.isFadingIn) {
+      // Calculate fade-in progress
+      const fadeProgress = Math.min(
+        1,
+        (Date.now() - this.fadeStart) / this.fadeDuration
+      );
+
+      // Apply opacity to all elements
+      this.moonMaterial.opacity = 0.9 * fadeProgress;
+      this.glowMaterial.opacity = 0.25 * fadeProgress;
+
+      this.craters.forEach((crater) => {
+        (crater.material as THREE.MeshBasicMaterial).opacity = 0.8 * fadeProgress;
+      });
+
+      // When fade-in is complete, reset isFadingIn
+      if (fadeProgress === 1) {
+        this.isFadingIn = false;
+      }
+    } else if (this.isFadingOut) {
+      // Calculate fade-out progress
       const fadeProgress = Math.min(
         1,
         (Date.now() - this.fadeStart) / this.fadeDuration
@@ -295,6 +390,33 @@ export class BloodMoon {
 
         return; // Stop animation loop
       }
+    } else if (this.isGrowing) {
+      // Calculate growth progress
+      const growthProgress = Math.min(
+        1,
+        (Date.now() - this.growthStart) / this.growthDuration
+      );
+
+      // Calculate target scale based on level radius
+      const targetScale = this.levelRadius / 3.2; // Based on original moon size of 3.2
+      
+      // Calculate new scale - linear growth
+      // Start very small (0.05) and grow to full size (targetScale)
+      let newScale = 0.05 + (targetScale - 0.05) * growthProgress;
+      
+      // If the moon is still invisible (during initial fade-in period),
+      // keep the visual scale tiny but let the timer countdown continue
+      if (this.moonMaterial.opacity < 0.1) {
+        newScale = 0.05; // Stay visually small until fade-in completes
+      }
+      
+      // Apply new scale
+      this.moonGroup.scale.set(newScale, newScale, 1);
+      
+      // When growth is complete, keep the final size
+      if (growthProgress === 1) {
+        this.isGrowing = false;
+      }
     } else if (this.isShrinking) {
       // Calculate shrink progress
       const shrinkProgress = Math.min(
@@ -302,15 +424,13 @@ export class BloodMoon {
         (Date.now() - this.shrinkStart) / this.shrinkDuration
       );
 
-      // Ease-in-out function for smooth animation
-      const easedProgress =
-        shrinkProgress < 0.5
-          ? 2 * shrinkProgress * shrinkProgress
-          : -1 + (4 - 2 * shrinkProgress) * shrinkProgress;
+      // Use a more dramatic, non-linear shrinking animation
+      // Start slowly, then collapse rapidly at the end
+      const easedProgress = Math.pow(shrinkProgress, 3); // Cubic easing
 
       // Get current scale and reduce it
       const currentScale = this.moonGroup.scale.x;
-      const finalScale = 0.2; // Shrink to 20% of expanded size
+      const finalScale = 0.01; // Shrink to almost nothing (1% of expanded size)
 
       // Calculate new scale
       const newScale =
@@ -318,31 +438,61 @@ export class BloodMoon {
 
       // Apply new scale
       this.moonGroup.scale.set(newScale, newScale, 1);
+      
+      // Make the Blood Moon glow more intensely as it collapses
+      const glowIntensity = 1 + (1 - shrinkProgress) * 2; // Glow increases then fades
+      this.glow.scale.set(
+        glowIntensity,
+        glowIntensity,
+        1
+      );
+      
+      // Change color to become more intense red as it collapses
+      const redIntensity = 1 + (1 - Math.pow(shrinkProgress, 2)) * 0.5;
+      this.moonMaterial.color.setRGB(redIntensity, 0.2, 0.2);
+      this.glowMaterial.color.setRGB(redIntensity, 0.3, 0.3);
+      
+      // Add some pulsation during collapse
+      if (shrinkProgress > 0.5) {
+        const pulseRate = 20 + shrinkProgress * 50; // Faster pulsing as it collapses
+        const pulseAmount = 0.1 * (1 - shrinkProgress);
+        const pulse = 1 + Math.sin(Date.now() * 0.01 * pulseRate) * pulseAmount;
+        
+        // Apply pulse to opacity
+        this.moonMaterial.opacity = 0.9 * pulse;
+        this.glowMaterial.opacity = 0.25 * pulse * 3; // Glow pulses more dramatically
+      }
 
       // When shrinking is complete, reset isShrinking
       if (shrinkProgress === 1) {
         this.isShrinking = false;
+        
+        // Reset appearance
+        this.moonMaterial.color.setRGB(0.67, 0, 0); // Back to default deep red
+        this.glowMaterial.color.setRGB(1, 0.2, 0.2); // Back to default glow
+        
+        // The moon should be almost invisible at this point
+        this.moonMaterial.opacity = 0.05;
+        this.glowMaterial.opacity = 0.01;
       }
-    } else {
-      // Subtle pulsing effect on the glow
-      this.glow.scale.set(
-        1 + Math.sin(time * 0.5) * 0.05,
-        1 + Math.sin(time * 0.5) * 0.05,
-        1
-      );
+    }
 
-      // Only apply subtle wobble animation if the moon is at its original position
-      // Check if we're at the original position or not
-      const isAtOriginalPosition =
-        Math.abs(this.moonGroup.position.x - 7.2) < 0.1 &&
-        Math.abs(this.moonGroup.position.y - 7.2) < 0.1;
+    // Always apply subtle pulsing effect on the glow, regardless of other animations
+    this.glow.scale.set(
+      1 + Math.sin(time * 0.5) * 0.05,
+      1 + Math.sin(time * 0.5) * 0.05,
+      1
+    );
 
-      if (isAtOriginalPosition) {
-        // Very subtle movement when at original position
-        const wobbleX = Math.cos(time * 0.3) * 0.2;
-        const wobbleY = Math.sin(time * 0.2) * 0.3;
+    // Add a subtle wobble to the moon at the center
+    if (this.moonGroup.position.x === 0 && this.moonGroup.position.y === 0) {
+      // Very subtle movement when at center
+      const wobbleX = Math.cos(time * 0.3) * 0.05;
+      const wobbleY = Math.sin(time * 0.2) * 0.05;
 
-        this.moonGroup.position.set(7.2 + wobbleX, 7.2 + wobbleY, 0);
+      // Apply wobble if not zipping across the level
+      if (!this.isShrinking) {
+        this.moonGroup.position.set(wobbleX, wobbleY, 0);
       }
     }
 
