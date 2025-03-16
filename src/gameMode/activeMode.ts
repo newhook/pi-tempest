@@ -4,7 +4,7 @@ import { GameMode } from "./gameMode";
 import { SceneSetup } from "../scene";
 import { EnemyManager } from "../enemies";
 import { Enemy } from "../enemy";
-import { updateScore, updateCountdownTimer } from "../ui";
+import { updateScore, updateLives, updateCountdownTimer } from "../ui";
 import { createPlayer, animatePlayer } from "../player";
 import { BloodMoon } from "../bloodMoon";
 import { Level, LevelType } from "../levels";
@@ -223,12 +223,12 @@ export class ActiveMode implements GameMode {
       if (playerHit) {
         // Stop current sounds
         SoundManager.getInstance().stopAllSounds();
-        
+
         // Decrement lives when player is hit
         this.gameState.lives--;
 
         // Update lives UI
-        import("../ui").then((ui) => ui.updateLives(this.gameState));
+        updateLives(this.gameState);
 
         if (this.gameState.lives <= 0) {
           // Game over if no lives left
@@ -865,7 +865,7 @@ export class ActiveMode implements GameMode {
   private showLevelStartText(): void {
     // First message: "The dark moon is rising..."
     const darkMoonText = document.createElement("div");
-    darkMoonText.textContent = "The dark moon is rising...";
+    darkMoonText.textContent = "The BLOOD MOON is rising...";
     darkMoonText.style.position = "absolute";
     darkMoonText.style.top = "10%";
     darkMoonText.style.left = "50%";
@@ -974,7 +974,7 @@ export class ActiveMode implements GameMode {
       y: this.player.rotation.y,
       z: this.player.rotation.z,
     };
-    
+
     // Play ship flying sound
     const flyingSound = SoundManager.getInstance().playShipFlying();
 
@@ -1050,7 +1050,7 @@ export class ActiveMode implements GameMode {
 
           // Stop the flying sound when animation completes
           flyingSound.stop();
-          
+
           resolve();
         }
 
@@ -1237,7 +1237,7 @@ export class ActiveMode implements GameMode {
   private handleBloodMoonReachedBoundary(): void {
     // Stop any ongoing sounds
     SoundManager.getInstance().stopAllSounds();
-    
+
     // Show a warning message
     const warningMessage = document.createElement("div");
     warningMessage.id = "blood-moon-warning";

@@ -649,42 +649,42 @@ export class Enemy {
         return {
           hitPoints: 1,
           speedMultiplier: 1.0,
-          points: 7,
+          points: 3,
         };
 
       case 1: // Crosser - always follows spokes but crosses between them
         return {
           hitPoints: 2,
           speedMultiplier: 0.9,
-          points: 9,
+          points: 4,
         };
 
       case 2: // Speeder - follows patterns but moves faster
         return {
           hitPoints: 2,
           speedMultiplier: 1.5, // Faster!
-          points: 12,
+          points: 5,
         };
 
       case 3: // Zigzagger - erratic zig-zag movement
         return {
           hitPoints: 3,
           speedMultiplier: 1.1,
-          points: 14,
+          points: 6,
         };
 
       case 4: // Orbiter - circular orbital movement
         return {
           hitPoints: 3,
           speedMultiplier: 0.8,
-          points: 14,
+          points: 8,
         };
 
       case 5: // Bouncer - bouncing movement pattern
         return {
           hitPoints: 4,
           speedMultiplier: 1.2,
-          points: 10,
+          points: 5,
         };
 
       case 6: // Chaotic - extremely erratic movement

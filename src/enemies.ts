@@ -3,6 +3,7 @@ import { GameState, ActiveModeState, Explosion } from "./types";
 import { Enemy } from "./enemy";
 import { Level, LevelType } from "./levels";
 import { SoundManager } from "./synth";
+import { updateScore } from "./ui";
 
 // Class to handle enemy explosions at the level boundary
 class EnemyExplosion {
@@ -354,6 +355,9 @@ export class EnemyManager {
           // Create explosion at the boundary
           this.createBoundaryExplosion(enemy, level);
         }
+
+        this.gameState.score -= enemy.getPoints();
+        updateScore(this.gameState);
 
         // Remove the enemy
         enemy.remove();
