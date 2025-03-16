@@ -8,12 +8,21 @@ export enum LevelType {
   PiSymbol = 4,
 }
 
+export interface SpokePosition {
+  angle: number;       // Angle of the spoke in radians
+  outerX: number;      // X coordinate at outer end of spoke
+  outerY: number;      // Y coordinate at outer end of spoke
+  innerX: number;      // X coordinate at inner end of spoke (usually 0)
+  innerY: number;      // Y coordinate at inner end of spoke (usually 0)
+}
+
 export class Level {
   public group: THREE.Group;
   public radius: number;
   public levelNumber: number;
   public levelType: LevelType;
   public spokeCount!: number;
+  public spokePositions: SpokePosition[] = [];
 
   constructor(levelNumber: number, radius: number) {
     this.group = new THREE.Group();
@@ -93,6 +102,11 @@ export class Level {
   public getRadius(): number {
     return this.radius;
   }
+  
+  // Helper method to get the spoke positions
+  public getSpokePositions(): SpokePosition[] {
+    return this.spokePositions;
+  }
 
   // Create a basic circular level
   private createCircleLevel(): void {
@@ -114,16 +128,28 @@ export class Level {
     // Add "spokes" radiating from center
     this.spokeCount = 16;
     const spokeGeometry = new THREE.BufferGeometry();
-
+    
+    // Clear any existing spoke positions
+    this.spokePositions = [];
+    
     const positions = [];
     for (let i = 0; i < this.spokeCount; i++) {
       const angle = (i / this.spokeCount) * Math.PI * 2;
+      const outerX = Math.cos(angle) * this.radius;
+      const outerY = Math.sin(angle) * this.radius;
+      
+      // Store spoke positions for enemy controllers
+      this.spokePositions.push({
+        angle: angle,
+        outerX: outerX,
+        outerY: outerY,
+        innerX: 0,
+        innerY: 0
+      });
+      
+      // Add to positions for rendering
       positions.push(0, 0, 0);
-      positions.push(
-        Math.cos(angle) * this.radius,
-        Math.sin(angle) * this.radius,
-        0
-      );
+      positions.push(outerX, outerY, 0);
     }
 
     spokeGeometry.setAttribute(
@@ -190,16 +216,27 @@ export class Level {
     // Add spokes radiating from center
     this.spokeCount = 20;
     const spokeGeometry = new THREE.BufferGeometry();
+    
+    // Clear any existing spoke positions
+    this.spokePositions = [];
 
     const positions = [];
     for (let i = 0; i < this.spokeCount; i++) {
       const angle = (i / this.spokeCount) * Math.PI * 2;
+      const outerX = Math.cos(angle) * this.radius;
+      const outerY = Math.sin(angle) * this.radius;
+      
+      // Store spoke positions for enemy controllers
+      this.spokePositions.push({
+        angle: angle,
+        outerX: outerX,
+        outerY: outerY,
+        innerX: 0,
+        innerY: 0
+      });
+      
       positions.push(0, 0, 0);
-      positions.push(
-        Math.cos(angle) * this.radius,
-        Math.sin(angle) * this.radius,
-        0
-      );
+      positions.push(outerX, outerY, 0);
     }
 
     spokeGeometry.setAttribute(
@@ -269,17 +306,28 @@ export class Level {
     this.spokeCount = points;
     const spokeGeometry = new THREE.BufferGeometry();
     const spokeVertices = [];
+    
+    // Clear any existing spoke positions
+    this.spokePositions = [];
 
     // Add spokes to the points of the star
     for (let i = 0; i < points * 2; i += 2) {
       // Only to the outer points
       const angle = (i / (points * 2)) * Math.PI * 2;
+      const outerX = Math.cos(angle) * this.radius;
+      const outerY = Math.sin(angle) * this.radius;
+      
+      // Store spoke positions for enemy controllers
+      this.spokePositions.push({
+        angle: angle,
+        outerX: outerX,
+        outerY: outerY,
+        innerX: 0,
+        innerY: 0
+      });
+      
       spokeVertices.push(0, 0, 0); // Center
-      spokeVertices.push(
-        Math.cos(angle) * this.radius,
-        Math.sin(angle) * this.radius,
-        0
-      ); // Outer point
+      spokeVertices.push(outerX, outerY, 0); // Outer point
     }
 
     spokeGeometry.setAttribute(
@@ -361,16 +409,27 @@ export class Level {
     // Add spokes radiating from center
     this.spokeCount = 18;
     const spokeGeometry = new THREE.BufferGeometry();
+    
+    // Clear any existing spoke positions
+    this.spokePositions = [];
 
     const positions = [];
     for (let i = 0; i < this.spokeCount; i++) {
       const angle = (i / this.spokeCount) * Math.PI * 2;
+      const outerX = Math.cos(angle) * this.radius;
+      const outerY = Math.sin(angle) * this.radius;
+      
+      // Store spoke positions for enemy controllers
+      this.spokePositions.push({
+        angle: angle,
+        outerX: outerX,
+        outerY: outerY,
+        innerX: 0,
+        innerY: 0
+      });
+      
       positions.push(0, 0, 0);
-      positions.push(
-        Math.cos(angle) * this.radius,
-        Math.sin(angle) * this.radius,
-        0
-      );
+      positions.push(outerX, outerY, 0);
     }
 
     spokeGeometry.setAttribute(
@@ -442,16 +501,30 @@ export class Level {
     // Add spokes radiating from center
     this.spokeCount = 24;
     const spokeGeometry = new THREE.BufferGeometry();
+    
+    // Clear any existing spoke positions
+    this.spokePositions = [];
 
     const positions = [];
     for (let i = 0; i < this.spokeCount; i++) {
       const angle = (i / this.spokeCount) * Math.PI * 2;
+      // For wave levels, calculate the outer position with the wave function
+      const amplitude = this.radius * 0.05;
+      const waveRadius = this.radius + Math.sin(angle * 3.14) * amplitude;
+      const outerX = Math.cos(angle) * waveRadius;
+      const outerY = Math.sin(angle) * waveRadius;
+      
+      // Store spoke positions for enemy controllers
+      this.spokePositions.push({
+        angle: angle,
+        outerX: outerX,
+        outerY: outerY,
+        innerX: 0,
+        innerY: 0
+      });
+      
       positions.push(0, 0, 0);
-      positions.push(
-        Math.cos(angle) * this.radius,
-        Math.sin(angle) * this.radius,
-        0
-      );
+      positions.push(outerX, outerY, 0);
     }
 
     spokeGeometry.setAttribute(
