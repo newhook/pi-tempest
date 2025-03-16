@@ -80,6 +80,9 @@ export class ActiveMode implements GameMode {
 
     // Show the initial countdown time of 60 seconds
     updateCountdownTimer(60);
+    
+    // Initialize or update the lives display
+    import("../ui").then(ui => ui.updateLives(this.gameState));
 
     // Reset enemy spawn timer to start spawning enemies
     this.nextEnemyTime = this.clock.getElapsedTime();
@@ -166,21 +169,41 @@ export class ActiveMode implements GameMode {
     // Check for enemy-bullet collisions
     this.checkBulletCollisions();
 
-    // Check for player-enemy or if player is hit by enemy bullets or explosions (only if ghost mode is not active, and not
-    // in transition)
-    if (
-      !this.modeState.ghostMode &&
-      !this.transitionInProgress &&
-      (this.enemyManager.checkPlayerCollision(this.player) ||
-        this.checkPlayerHitByEnemyBullets() ||
-        this.checkPlayerHitByExplosion())
-    ) {
-      document.dispatchEvent(
-        new CustomEvent("gameStatusChanged", {
-          detail: { status: "gameOver" },
-        })
-      );
-      return;
+    // Only check for collisions if the player is vulnerable
+    if (!this.modeState.ghostMode && !this.transitionInProgress) {
+      let playerHit = false;
+      
+      // Check each type of collision separately, but only process the first hit
+      if (this.enemyManager.checkPlayerCollision(this.player)) {
+        playerHit = true;
+      } else if (this.checkPlayerHitByEnemyBullets()) {
+        playerHit = true;
+      } else if (this.checkPlayerHitByExplosion()) {
+        playerHit = true;
+      }
+      
+      // If player was hit, handle the collision
+      if (playerHit) {
+        // Decrement lives when player is hit
+        this.gameState.lives--;
+        
+        // Update lives UI
+        import("../ui").then(ui => ui.updateLives(this.gameState));
+        
+        if (this.gameState.lives <= 0) {
+          // Game over if no lives left
+          document.dispatchEvent(
+            new CustomEvent("gameStatusChanged", {
+              detail: { status: "gameOver" },
+            })
+          );
+          return;
+        } else {
+          // Respawn player with temporary invulnerability
+          this.respawnPlayer();
+          return;
+        }
+      }
     }
 
     // Animate player
@@ -896,6 +919,168 @@ export class ActiveMode implements GameMode {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  
+  // Handle player death and respawn with temporary invulnerability
+  private respawnPlayer(): void {
+    // Set ghostMode immediately to prevent multiple collisions during death animation
+    this.modeState.ghostMode = true;
+    
+    // Visual feedback for player death
+    this.createPlayerDeathEffect();
+    
+    // Make player temporarily invisible
+    this.player.visible = false;
+    
+    // Remove all enemy bullets to give player a cleaner start
+    this.clearEnemyBullets();
+    
+    // Set a timeout to respawn the player with temporary invulnerability
+    setTimeout(() => {
+      // Reset player position to a random position on the level
+      this.modeState.playerAngle = Math.random() * Math.PI * 2;
+      this.normalizePlayerAngle();
+      
+      const playerPosition = this.getPositionOnLevelOutline(this.modeState.playerAngle);
+      this.player.position.set(playerPosition.x, playerPosition.y, 0);
+      this.player.lookAt(0, 0, 0);
+      
+      // Make the player visible again but semi-transparent
+      this.player.visible = true;
+      
+      // Update the ghost mode display
+      this.updateGhostModeDisplay(true);
+      
+      // Make the player semi-transparent to indicate invulnerability
+      this.player.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.material.opacity = 0.5;
+          object.material.transparent = true;
+        }
+      });
+      
+      // Set a timer to end invulnerability
+      setTimeout(() => {
+        if (this.gameState.gameStatus === "active") {
+          this.modeState.ghostMode = false;
+          this.updateGhostModeDisplay(false);
+          
+          // Restore player opacity
+          this.player.traverse((object) => {
+            if (object instanceof THREE.Mesh) {
+              object.material.opacity = 1.0;
+              object.material.transparent = false;
+            }
+          });
+        }
+      }, 3000); // 3 seconds of invulnerability
+    }, 1000); // 1 second delay before respawn
+  }
+  
+  // Clear all enemy bullets from the screen
+  private clearEnemyBullets(): void {
+    if (this.modeState.enemyBullets) {
+      // Remove all enemy bullets from the scene
+      for (const bullet of this.modeState.enemyBullets) {
+        this.sceneSetup.scene.remove(bullet.mesh);
+      }
+      // Clear the bullets array
+      this.modeState.enemyBullets = [];
+    }
+  }
+  
+  // Create a visual effect for player death
+  private createPlayerDeathEffect(): void {
+    // Create explosion effect at player position
+    const particleCount = 60;
+    const particles = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    
+    // Player position
+    const playerPos = this.player.position.clone();
+    
+    for (let i = 0; i < particleCount; i++) {
+      // Set initial positions at player location
+      positions[i * 3] = playerPos.x;
+      positions[i * 3 + 1] = playerPos.y;
+      positions[i * 3 + 2] = playerPos.z;
+      
+      // Random velocities for explosion effect
+      velocities[i * 3] = (Math.random() - 0.5) * 0.5;
+      velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.1;
+      
+      // Player colors (blue/cyan)
+      colors[i * 3] = 0.0; // R
+      colors[i * 3 + 1] = 0.7 + Math.random() * 0.3; // G
+      colors[i * 3 + 2] = 0.8 + Math.random() * 0.2; // B
+    }
+    
+    particles.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    particles.setAttribute("velocity", new THREE.BufferAttribute(velocities, 3));
+    particles.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    
+    // Create colored particle material
+    const pMaterial = new THREE.PointsMaterial({
+      size: 0.3,
+      vertexColors: true,
+      transparent: true,
+      opacity: 1.0,
+      depthWrite: false,
+    });
+    
+    // Create the particle system
+    const particleSystem = new THREE.Points(particles, pMaterial);
+    this.sceneSetup.scene.add(particleSystem);
+    
+    // Play explosion sound
+    const audio = new Audio();
+    audio.src = "explosion-1.mp3";
+    audio.volume = 0.6;
+    audio.play();
+    
+    // Animate the particles
+    const updateParticles = () => {
+      const positions = particles.attributes.position.array as Float32Array;
+      const velocities = particles.attributes.velocity.array as Float32Array;
+      
+      for (let i = 0; i < particleCount; i++) {
+        // Update positions based on velocities
+        positions[i * 3] += velocities[i * 3];
+        positions[i * 3 + 1] += velocities[i * 3 + 1];
+        positions[i * 3 + 2] += velocities[i * 3 + 2];
+        
+        // Add gravity effect
+        velocities[i * 3 + 1] -= 0.01;
+      }
+      
+      particles.attributes.position.needsUpdate = true;
+      
+      // Gradually reduce opacity
+      pMaterial.opacity -= 0.01;
+      if (pMaterial.opacity <= 0) {
+        pMaterial.opacity = 0;
+      }
+      
+      // Continue animation until particles fade out
+      if (pMaterial.opacity > 0 && particleSystem.parent) {
+        requestAnimationFrame(updateParticles);
+      } else {
+        this.sceneSetup.scene.remove(particleSystem);
+      }
+    };
+    
+    // Start the animation
+    updateParticles();
+    
+    // Remove particles after animation completes
+    setTimeout(() => {
+      if (particleSystem.parent) {
+        this.sceneSetup.scene.remove(particleSystem);
+      }
+    }, 2000);
   }
 
   // Handle when the blood moon reaches the level boundary

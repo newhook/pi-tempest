@@ -156,6 +156,7 @@ export class GameOverMode implements GameMode {
     // Reset game state for new game
     this.gameState.score = 0;
     this.gameState.currentLevel = 1;
+    this.gameState.lives = 3; // Reset lives to 3
     
     // The active mode will initialize its own state when created
   }

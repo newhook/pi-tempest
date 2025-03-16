@@ -24,6 +24,7 @@ export class Game {
       score: 0,
       currentLevel: 1,
       gameStatus: "marquee",
+      lives: 3, // Start with three lives
     };
 
     // Set up clock for timing

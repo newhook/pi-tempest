@@ -323,15 +323,24 @@ export class Enemy {
     // Get the material
     const material = this.mesh.material as THREE.MeshStandardMaterial;
 
-    // Store original color if not already stored
+    // Store original color values if not already stored
     if (!this.mesh.userData.originalColor) {
       this.mesh.userData.originalColor = material.color.clone();
+      this.mesh.userData.originalEmissive = material.emissive.clone();
+      this.mesh.userData.originalEmissiveIntensity = material.emissiveIntensity;
+      
+      // Store a reference to any active recolorTimer
+      this.mesh.userData.recolorTimer = null;
+    }
+    
+    // Clear any existing recolor timeout to prevent race conditions
+    if (this.mesh.userData.recolorTimer) {
+      clearTimeout(this.mesh.userData.recolorTimer);
+      this.mesh.userData.recolorTimer = null;
     }
 
     // Flash bright white
     material.color.set(0xffffff);
-    material.emissive = material.emissive || new THREE.Color();
-    material.emissiveIntensity = material.emissiveIntensity || 0.5;
     material.emissive.set(0xffffff);
     material.emissiveIntensity = 1.0;
 
@@ -339,13 +348,36 @@ export class Enemy {
     this.updateHealthBar();
 
     // Return to original color after a short delay
-    setTimeout(() => {
+    this.mesh.userData.recolorTimer = setTimeout(() => {
       if (this.mesh && this.mesh.material) {
-        if (this.mesh.userData.originalColor) {
-          material.color.copy(this.mesh.userData.originalColor);
+        try {
+          // Restore original color
+          if (this.mesh.userData.originalColor) {
+            material.color.copy(this.mesh.userData.originalColor);
+          }
+          
+          // Restore original emissive color
+          if (this.mesh.userData.originalEmissive) {
+            material.emissive.copy(this.mesh.userData.originalEmissive);
+          } else {
+            // Fallback if for some reason original emissive wasn't stored
+            const hue = 0.6 + this.type / 30; // blues to purples, matching the creation color
+            const color = new THREE.Color().setHSL(hue, 1, 0.5);
+            material.emissive.copy(color);
+          }
+          
+          // Restore original emissive intensity
+          if (this.mesh.userData.originalEmissiveIntensity !== undefined) {
+            material.emissiveIntensity = this.mesh.userData.originalEmissiveIntensity;
+          } else {
+            material.emissiveIntensity = 0.5; // Default fallback
+          }
+          
+          // Clear the timer reference
+          this.mesh.userData.recolorTimer = null;
+        } catch (e) {
+          console.error("Error restoring enemy color:", e);
         }
-        material.emissive.set(0x000000);
-        material.emissiveIntensity = 0.5;
       }
     }, 100);
   }
