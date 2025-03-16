@@ -31,6 +31,35 @@ export class Enemy {
   private lastFireTime: number = 0; // Track time since last bullet fired
   private movementController: MovementController;
 
+  public static name(type: number): string {
+    switch (type) {
+      case 0:
+        return "Follower";
+      case 1:
+        return "Crosser";
+      case 2:
+        return "Speeder";
+      case 3:
+        return "Zigzagger";
+      case 4:
+        return "Orbiter";
+      case 5:
+        return "Bouncer";
+      case 6:
+        return "Chaotic";
+      case 7:
+        return "Hunter";
+      case 8:
+        return "Pi-follower";
+      case 9:
+        return "Advanced Pi-follower";
+      case 10:
+        return "Shard";
+      default:
+        return "Unknown";
+    }
+  }
+
   constructor(
     level: Level,
     mesh: THREE.Mesh,

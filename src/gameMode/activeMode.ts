@@ -3,6 +3,7 @@ import { GameState, ActiveModeState, Bullet } from "../types";
 import { GameMode } from "./gameMode";
 import { SceneSetup } from "../scene";
 import { EnemyManager } from "../enemies";
+import { Enemy } from "../enemy";
 import { updateScore } from "../ui";
 import { createPlayer, animatePlayer } from "../player";
 import { BloodMoon } from "../bloodMoon";
@@ -77,7 +78,7 @@ export class ActiveMode implements GameMode {
 
     // Reset enemy spawn timer to start spawning enemies
     this.lastEnemyTime = this.clock.getElapsedTime();
-    
+
     // Reset enemy spawning to random (not forced) when starting
     this.modeState.forcedEnemyType = undefined;
 
@@ -400,8 +401,10 @@ export class ActiveMode implements GameMode {
       let ghostText = this.modeState.ghostMode ? "GHOST MODE: ACTIVE" : "";
       // Add enemy type info
       ghostText += ghostText ? "<br>" : "";
-      ghostText += `SPAWNING ENEMY TYPE: ${this.modeState.forcedEnemyType}`;
-      
+      ghostText += `SPAWNING ENEMY TYPE: ${Enemy.name(
+        this.modeState.forcedEnemyType
+      )}`;
+
       // Update display
       ghostModeElement.innerHTML = ghostText;
       ghostModeElement.style.display = "block";
@@ -416,9 +419,10 @@ export class ActiveMode implements GameMode {
     if (this.modeState.forcedEnemyType === undefined) {
       this.modeState.forcedEnemyType = 0;
     } else {
-      this.modeState.forcedEnemyType = (this.modeState.forcedEnemyType + 1) % 10;
+      this.modeState.forcedEnemyType =
+        (this.modeState.forcedEnemyType + 1) % 10;
     }
-    
+
     // Update the UI to show which enemy type is being forced
     this.updateForcedEnemyTypeDisplay();
   }
@@ -426,7 +430,7 @@ export class ActiveMode implements GameMode {
   // Reset to random enemy spawning
   private resetEnemySpawning(): void {
     this.modeState.forcedEnemyType = undefined;
-    
+
     // Update the UI
     this.updateForcedEnemyTypeDisplay();
   }

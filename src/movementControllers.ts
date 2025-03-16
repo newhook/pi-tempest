@@ -838,45 +838,54 @@ export class ErraticMovementController extends BaseMovementController {
 
 // Bounce movement
 export class BounceMovementController extends BaseMovementController {
-  private pathParams?: {
-    startAngle: number;
-    spiralTightness: number;
-    waveAmplitude: number;
-    waveFrequency: number;
-    pathOffset: number;
-  };
+  private spokePosition: SpokePosition;
+  private bounceScale: number;
+
   constructor(enemy: Enemy) {
     super(enemy);
-    this.pathParams = {
-      startAngle: this.angle,
-      spiralTightness: 0.1 + Math.random() * 0.3,
-      waveAmplitude: 0.5 + Math.random() * 1.2,
-      waveFrequency: 2 + Math.random() * 4,
-      pathOffset: Math.random() * Math.PI * 2,
-    };
+    
+    // Get the actual spoke position data
+    const spokePositions = enemy.level.getSpokePositions();
+    
+    // Randomly select a spoke
+    const spokeCount = enemy.level.getSpokeCount();
+    const randomSpokeIndex = Math.floor(Math.random() * spokeCount);
+    
+    // Set the spoke position
+    this.spokePosition = spokePositions[randomSpokeIndex % spokePositions.length];
+    
+    // Update the angle for proper orientation
+    this.angle = this.spokePosition.angle;
+    
+    // Random bounce intensity
+    this.bounceScale = 0.05 + Math.random() * 0.15; // Controls how strong the bounce is
   }
 
   update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
-    let distanceFromCenter = this.enemy.distanceFromCenter;
-    this.angle = this.pathParams?.startAngle || this.angle;
-
-    // Calculate bounce effect
-    const bouncePhase = Math.floor(distanceFromCenter / (levelRadius * 0.2));
-    const bounceProgress =
-      (distanceFromCenter % (levelRadius * 0.2)) / (levelRadius * 0.2);
-
-    // If in odd bounce phase, create bounce effect by temporarily reducing distance
+    
+    // Calculate normalized distance and maintain original distance for calculations
+    const originalDistance = this.enemy.distanceFromCenter;
+    let adjustedDistance = originalDistance;
+    
+    // Calculate bounce parameters - a bounce every 20% of the level radius
+    const bouncePhase = Math.floor(originalDistance / (levelRadius * 0.2));
+    const bounceProgress = (originalDistance % (levelRadius * 0.2)) / (levelRadius * 0.2);
+    
+    // Only apply bounce on odd phases (every other segment)
     if (bouncePhase % 2 === 1) {
-      // Moving inward temporarily
-      const bounceAmount =
-        Math.sin(bounceProgress * Math.PI) * (levelRadius * 0.1);
-      distanceFromCenter -= bounceAmount;
+      // Apply sinusoidal bounce effect to get the characteristic bounce motion
+      const bounceAmount = Math.sin(bounceProgress * Math.PI) * (levelRadius * this.bounceScale);
+      adjustedDistance -= bounceAmount;
     }
-
-    const x = Math.cos(this.angle) * distanceFromCenter;
-    const y = Math.sin(this.angle) * distanceFromCenter;
-
+    
+    // Calculate position along the spoke using interpolation of spoke coordinates
+    const t = adjustedDistance / levelRadius;
+    
+    // Interpolate between inner and outer positions of the spoke
+    const x = this.spokePosition.innerX + (this.spokePosition.outerX - this.spokePosition.innerX) * t;
+    const y = this.spokePosition.innerY + (this.spokePosition.outerY - this.spokePosition.innerY) * t;
+    
     return { x, y };
   }
 }
