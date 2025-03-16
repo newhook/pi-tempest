@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { MovementController } from "./types";
 import { Enemy } from "./enemy";
+import { SpokePosition } from "./levels";
 
 // Base class for all movement controllers
 abstract class BaseMovementController implements MovementController {
@@ -24,14 +25,37 @@ abstract class BaseMovementController implements MovementController {
 
 // Simple spoke movement - straight outward along spokes
 export class SpokeMovementController extends BaseMovementController {
+  private spokePosition: SpokePosition;
+
   constructor(enemy: Enemy) {
     super(enemy);
+
+    // Get the actual spoke position data
+    const spokePositions = enemy.level.getSpokePositions();
+
+    // Randomly select a spoke
+    const spokeCount = enemy.level.getSpokeCount();
+    const randomSpokeIndex = Math.floor(Math.random() * spokeCount);
+
+    // Set the spoke position
+    this.spokePosition =
+      spokePositions[randomSpokeIndex % spokePositions.length];
+
+    // Update the angle for proper orientation (used by the enemy for visual effects)
+    this.angle = this.spokePosition.angle;
   }
 
   update(delta: number): { x: number; y: number } {
-    // Just move outward along the original angle
-    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
+    // Calculate position along the spoke using the stored spoke position
+    const t = this.enemy.distanceFromCenter / this.enemy.level.getRadius();
+
+    // Interpolate between inner and outer positions of the spoke
+    const x =
+      this.spokePosition.innerX +
+      (this.spokePosition.outerX - this.spokePosition.innerX) * t;
+    const y =
+      this.spokePosition.innerY +
+      (this.spokePosition.outerY - this.spokePosition.innerY) * t;
 
     return { x, y };
   }
@@ -39,27 +63,50 @@ export class SpokeMovementController extends BaseMovementController {
 
 // Spoke crossing movement - crosses between neighboring spokes
 export class SpokeCrossingMovementController extends BaseMovementController {
-  // For spoke movement
   private spokeIndex: number;
-  private spokeCrossingDirection?: number;
-  private spokeCrossingSpeed?: number;
+  private spokeCrossingDirection: number;
+  private spokeCrossingSpeed: number;
+  private spokePositions: SpokePosition[];
+  private targetSpokeIndex: number;
+  private crossingProgress: number = 0;
 
   constructor(enemy: Enemy) {
     super(enemy);
-    this.spokeIndex = Math.floor(
-      (this.angle / (Math.PI * 2)) * enemy.level.getSpokeCount()
-    );
+    const spokeCount = enemy.level.getSpokeCount();
+    this.spokePositions = enemy.level.getSpokePositions();
+
+    // Randomly select a starting spoke
+    this.spokeIndex = Math.floor(Math.random() * spokeCount);
+
+    // Set crossing parameters
     this.spokeCrossingDirection = Math.random() > 0.5 ? 1 : -1; // clockwise or counterclockwise
     this.spokeCrossingSpeed = 0.01 + Math.random() * 0.03; // random speed for crossing
 
-    // Note: The numSpokes is handled in the Enemy.update method and doesn't
-    // need to be initialized here. The controller will get the correct
-    // numSpokes value in each update call.
+    // Calculate target spoke for crossing
+    this.targetSpokeIndex = this.calculateTargetSpokeIndex();
+
+    // Update the angle for proper orientation (used by the enemy for visual effects)
+    const currentSpoke =
+      this.spokePositions[this.spokeIndex % this.spokePositions.length];
+    this.angle = currentSpoke.angle;
+  }
+
+  private calculateTargetSpokeIndex(): number {
+    // Get next spoke in the crossing direction
+    const spokeCount = this.enemy.level.getSpokeCount();
+    return (
+      (this.spokeIndex + this.spokeCrossingDirection + spokeCount) % spokeCount
+    );
   }
 
   update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
-    // Handle spoke crossing movement
+    const currentSpoke =
+      this.spokePositions[this.spokeIndex % this.spokePositions.length];
+    const targetSpoke =
+      this.spokePositions[this.targetSpokeIndex % this.spokePositions.length];
+
+    // Only start crossing after moving a certain distance from center
     if (this.enemy.distanceFromCenter > levelRadius * 0.3) {
       // Calculate crossover effect based on distance from center
       const crossFactor = Math.min(
@@ -67,19 +114,60 @@ export class SpokeCrossingMovementController extends BaseMovementController {
         (this.enemy.distanceFromCenter / levelRadius) * 2
       );
 
-      // Gradually shift the angle based on distance from center
-      this.angle +=
-        this.spokeCrossingDirection! *
-        this.spokeCrossingSpeed! *
-        crossFactor *
-        delta *
-        10;
+      // Update crossing progress
+      this.crossingProgress +=
+        this.spokeCrossingSpeed * crossFactor * delta * 10;
+
+      // If we've completed crossing to the next spoke
+      if (this.crossingProgress >= 1) {
+        // Move to the target spoke
+        this.spokeIndex = this.targetSpokeIndex;
+        // Calculate a new target spoke
+        this.targetSpokeIndex = this.calculateTargetSpokeIndex();
+        // Reset crossing progress
+        this.crossingProgress = 0;
+        // Update the angle for proper orientation
+        const newSpoke =
+          this.spokePositions[this.spokeIndex % this.spokePositions.length];
+        this.angle = newSpoke.angle;
+      }
     }
 
-    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
+    // Calculate position based on interpolation between spokes
+    const t = this.enemy.distanceFromCenter / levelRadius;
+
+    let x, y;
+
+    if (this.enemy.distanceFromCenter <= levelRadius * 0.3) {
+      // If close to center, just follow the current spoke
+      x = currentSpoke.innerX + (currentSpoke.outerX - currentSpoke.innerX) * t;
+      y = currentSpoke.innerY + (currentSpoke.outerY - currentSpoke.innerY) * t;
+    } else {
+      // When we're crossing between spokes, interpolate between them
+      // Calculate points along each spoke at our current distance
+      const currentX =
+        currentSpoke.innerX + (currentSpoke.outerX - currentSpoke.innerX) * t;
+      const currentY =
+        currentSpoke.innerY + (currentSpoke.outerY - currentSpoke.innerY) * t;
+
+      const targetX =
+        targetSpoke.innerX + (targetSpoke.outerX - targetSpoke.innerX) * t;
+      const targetY =
+        targetSpoke.innerY + (targetSpoke.outerY - targetSpoke.innerY) * t;
+
+      // Smoothly interpolate between the two positions
+      // Apply easing function for smoother transition
+      const easedProgress = this.easeInOutQuad(this.crossingProgress);
+      x = currentX + (targetX - currentX) * easedProgress;
+      y = currentY + (targetY - currentY) * easedProgress;
+    }
 
     return { x, y };
+  }
+
+  // Quadratic easing function for smoother transitions
+  private easeInOutQuad(t: number): number {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
   }
 }
 
@@ -96,11 +184,13 @@ export class ZigzagMovementController extends BaseMovementController {
   };
 
   private extensionLine?: THREE.Line;
+  private spokePositions: SpokePosition[] = [];
 
   constructor(enemy: Enemy) {
     super(enemy);
 
     const numSpokes = enemy.level.getSpokeCount();
+    this.spokePositions = enemy.level.getSpokePositions();
 
     // Initialize zigzag state
     this.zigzagState = {
@@ -119,23 +209,42 @@ export class ZigzagMovementController extends BaseMovementController {
       // Distance when we start next transition
       nextTransitionDistance: 1 + Math.random() * 2,
     };
+
+    // Update angle to match the current spoke
+    if (this.spokePositions.length > 0) {
+      const currentSpoke =
+        this.spokePositions[
+          this.zigzagState.currentSpoke % this.spokePositions.length
+        ];
+      this.angle = currentSpoke.angle;
+    }
   }
 
   update(delta: number): { x: number; y: number } {
     const numSpokes = this.enemy.level.getSpokeCount();
-    // Get current spoke angle
-    const spokeAngle =
-      (this.zigzagState.currentSpoke / this.enemy.level.getSpokeCount()) *
-      Math.PI *
-      2;
-    let angle = spokeAngle;
+    const levelRadius = this.enemy.level.getRadius();
 
-    // If we're in phase 0 (moving along spoke), check if we need to switch to transition
+    // Get current spoke details
+    let currentSpoke: SpokePosition;
+    if (this.spokePositions.length > 0) {
+      currentSpoke =
+        this.spokePositions[
+          this.zigzagState.currentSpoke % this.spokePositions.length
+        ];
+    } else {
+      // Fallback if no spoke positions available
+      return {
+        x: Math.cos(this.angle) * this.enemy.distanceFromCenter,
+        y: Math.sin(this.angle) * this.enemy.distanceFromCenter,
+      };
+    }
+
+    // Calculate position along the current spoke using t-value
+    const t = this.enemy.distanceFromCenter / levelRadius;
+
+    // Phase 0: Moving along spoke
     if (this.zigzagState.phase === 0) {
-      // Move outward along spoke
-      angle = spokeAngle;
-
-      // If we've reached the transition distance, set up next transition
+      // Check if we need to start a transition
       if (
         this.enemy.distanceFromCenter >= this.zigzagState.nextTransitionDistance
       ) {
@@ -163,13 +272,29 @@ export class ZigzagMovementController extends BaseMovementController {
         this.zigzagState.extensionProgress = 0;
         this.zigzagState.transitionProgress = 0;
       }
+
+      // Moving along current spoke
+      const x =
+        currentSpoke.innerX + (currentSpoke.outerX - currentSpoke.innerX) * t;
+      const y =
+        currentSpoke.innerY + (currentSpoke.outerY - currentSpoke.innerY) * t;
+
+      this.angle = currentSpoke.angle;
+      return { x, y };
     }
 
-    // Phase 1: Transition between spokes
-    if (this.zigzagState.phase === 1) {
-      // Get target spoke angle
-      const targetSpokeAngle =
-        (this.zigzagState.targetSpoke! / numSpokes) * Math.PI * 2;
+    // Phase 1: Transitioning between spokes
+    if (this.zigzagState.phase === 1 && this.zigzagState.targetSpoke !== null) {
+      const targetSpoke =
+        this.spokePositions[
+          this.zigzagState.targetSpoke % this.spokePositions.length
+        ];
+
+      // Calculate current position on current spoke
+      const currentX =
+        currentSpoke.innerX + (currentSpoke.outerX - currentSpoke.innerX) * t;
+      const currentY =
+        currentSpoke.innerY + (currentSpoke.outerY - currentSpoke.innerY) * t;
 
       // Phase 1a: Extending line toward target spoke
       if (this.zigzagState.isExtending) {
@@ -183,7 +308,8 @@ export class ZigzagMovementController extends BaseMovementController {
         }
 
         // During extension phase, keep position on current spoke
-        angle = spokeAngle;
+        this.angle = currentSpoke.angle;
+        return { x: currentX, y: currentY };
       }
       // Phase 1b: Zipping along the extended line
       else {
@@ -193,7 +319,7 @@ export class ZigzagMovementController extends BaseMovementController {
         // If zip complete, transition to target spoke
         if (this.zigzagState.transitionProgress >= 1) {
           // Complete transition to new spoke
-          this.zigzagState.currentSpoke = this.zigzagState.targetSpoke!;
+          this.zigzagState.currentSpoke = this.zigzagState.targetSpoke;
           this.zigzagState.targetSpoke = null;
 
           // Return to spoke movement phase
@@ -203,30 +329,51 @@ export class ZigzagMovementController extends BaseMovementController {
           this.zigzagState.nextTransitionDistance =
             this.enemy.distanceFromCenter + 1 + Math.random() * 2;
 
-          // Set to target spoke angle
-          angle = targetSpokeAngle;
+          // Use target spoke position at current distance
+          const targetX =
+            targetSpoke.innerX + (targetSpoke.outerX - targetSpoke.innerX) * t;
+          const targetY =
+            targetSpoke.innerY + (targetSpoke.outerY - targetSpoke.innerY) * t;
+
+          // Update angle to target spoke
+          this.angle = targetSpoke.angle;
+          return { x: targetX, y: targetY };
         }
-        // During zip movement, interpolate between spoke angles
+        // During zip movement, interpolate between spokes
         else {
           // Easing function for smooth acceleration/deceleration
-          const t = this.zigzagState.transitionProgress;
-          const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+          const progress = this.zigzagState.transitionProgress;
+          const eased =
+            progress < 0.5
+              ? 2 * progress * progress
+              : 1 - Math.pow(-2 * progress + 2, 2) / 2;
 
-          // Interpolate between spoke angles for smooth movement
-          const angleDiff = targetSpokeAngle - spokeAngle;
+          // Calculate position on target spoke at current distance
+          const targetX =
+            targetSpoke.innerX + (targetSpoke.outerX - targetSpoke.innerX) * t;
+          const targetY =
+            targetSpoke.innerY + (targetSpoke.outerY - targetSpoke.innerY) * t;
+
+          // Interpolate between current and target positions
+          const x = currentX + (targetX - currentX) * eased;
+          const y = currentY + (targetY - currentY) * eased;
+
+          // Interpolate angle for proper orientation
+          const angleDiff = targetSpoke.angle - currentSpoke.angle;
           // Handle wrapping around 2π
           const wrappedDiff = ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+          this.angle = currentSpoke.angle + wrappedDiff * eased;
 
-          angle = spokeAngle + wrappedDiff * eased;
+          return { x, y };
         }
       }
     }
 
-    // Calculate position
-    const x = Math.cos(angle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(angle) * this.enemy.distanceFromCenter;
-
-    this.angle = angle;
+    // Fallback - just move along current spoke
+    const x =
+      currentSpoke.innerX + (currentSpoke.outerX - currentSpoke.innerX) * t;
+    const y =
+      currentSpoke.innerY + (currentSpoke.outerY - currentSpoke.innerY) * t;
     return { x, y };
   }
 
@@ -250,30 +397,38 @@ export class ZigzagMovementController extends BaseMovementController {
   }
 
   private updateExtensionLine(scene: THREE.Scene): void {
-    if (!this.zigzagState.targetSpoke) return;
+    if (!this.zigzagState.targetSpoke || this.spokePositions.length === 0)
+      return;
 
-    // Calculate current and target positions
-    const numSpokes = this.enemy.level.getSpokeCount();
-    const currentSpokeAngle =
-      (this.zigzagState.currentSpoke / numSpokes) * Math.PI * 2;
-    const targetSpokeAngle =
-      (this.zigzagState.targetSpoke / numSpokes) * Math.PI * 2;
+    // Get the current and target spoke positions
+    const currentSpoke =
+      this.spokePositions[
+        this.zigzagState.currentSpoke % this.spokePositions.length
+      ];
+    const targetSpoke =
+      this.spokePositions[
+        this.zigzagState.targetSpoke % this.spokePositions.length
+      ];
 
-    // Get positions for line endpoints
-    const startPos = new THREE.Vector3(
-      Math.cos(currentSpokeAngle) * this.enemy.distanceFromCenter,
-      Math.sin(currentSpokeAngle) * this.enemy.distanceFromCenter,
-      0
-    );
+    // Calculate normalized distance for current position
+    const t = this.enemy.distanceFromCenter / this.enemy.level.getRadius();
 
-    // Target position at the same distance from center but on target spoke
-    const endDistance =
-      this.enemy.distanceFromCenter * this.zigzagState.extensionProgress;
-    const endPos = new THREE.Vector3(
-      Math.cos(targetSpokeAngle) * endDistance,
-      Math.sin(targetSpokeAngle) * endDistance,
-      0
-    );
+    // Calculate current position on current spoke
+    const currentX =
+      currentSpoke.innerX + (currentSpoke.outerX - currentSpoke.innerX) * t;
+    const currentY =
+      currentSpoke.innerY + (currentSpoke.outerY - currentSpoke.innerY) * t;
+
+    // Calculate target position with extension progress
+    const targetT = t * this.zigzagState.extensionProgress;
+    const targetX =
+      targetSpoke.innerX + (targetSpoke.outerX - targetSpoke.innerX) * targetT;
+    const targetY =
+      targetSpoke.innerY + (targetSpoke.outerY - targetSpoke.innerY) * targetT;
+
+    // Create vector positions for line endpoints
+    const startPos = new THREE.Vector3(currentX, currentY, 0);
+    const endPos = new THREE.Vector3(targetX, targetY, 0);
 
     // Create or update line
     if (!this.extensionLine) {
