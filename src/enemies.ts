@@ -30,9 +30,15 @@ export class EnemyManager {
       Math.ceil(this.gameState.currentLevel * 2 - 1) // 2 new types per level
     );
 
-    // Select a random enemy type from the available range
-    // const enemyType = Math.floor(Math.random() * (maxEnemyType + 1));
-    let enemyType = 1;
+    // Use forced enemy type if available, otherwise random
+    let enemyType;
+    if (this.modeState.forcedEnemyType !== undefined) {
+      // Make sure the forced type is within valid range (0-9)
+      enemyType = Math.min(9, Math.max(0, this.modeState.forcedEnemyType));
+    } else {
+      // Select a random enemy type from the available range
+      enemyType = Math.floor(Math.random() * (maxEnemyType + 1));
+    }
 
     // Create enemy geometry based on the enemy type
     const enemyGeometry = Enemy.getGeometry(enemyType);

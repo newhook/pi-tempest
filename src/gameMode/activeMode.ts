@@ -77,6 +77,9 @@ export class ActiveMode implements GameMode {
 
     // Reset enemy spawn timer to start spawning enemies
     this.lastEnemyTime = this.clock.getElapsedTime();
+    
+    // Reset enemy spawning to random (not forced) when starting
+    this.modeState.forcedEnemyType = undefined;
 
     // Set up player movement based on keys
     // Update player angle based on keys in animation loop
@@ -256,6 +259,10 @@ export class ActiveMode implements GameMode {
     // Fly the player ship to the blood moon (center)
     await this.flyPlayerToBloodMoon();
 
+    // Reset enemy spawning to random when advancing level
+    this.modeState.forcedEnemyType = undefined;
+    this.updateForcedEnemyTypeDisplay();
+
     // Increment level
     this.gameState.currentLevel++;
 
@@ -361,8 +368,67 @@ export class ActiveMode implements GameMode {
       ghostModeElement.textContent = "GHOST MODE: ACTIVE";
       ghostModeElement.style.display = "block";
     } else {
+      // Only hide if we're not also showing forced enemy type
+      if (this.modeState.forcedEnemyType === undefined) {
+        ghostModeElement.style.display = "none";
+      }
+    }
+
+    // Update forced enemy type display if applicable
+    this.updateForcedEnemyTypeDisplay();
+  }
+
+  private updateForcedEnemyTypeDisplay(): void {
+    // Get existing ghost mode display since we'll append to it
+    let ghostModeElement = document.getElementById("ghost-mode");
+
+    if (!ghostModeElement) {
+      // Create it if it doesn't exist
+      ghostModeElement = document.createElement("div");
+      ghostModeElement.id = "ghost-mode";
+      ghostModeElement.style.position = "absolute";
+      ghostModeElement.style.top = "60px";
+      ghostModeElement.style.right = "20px";
+      ghostModeElement.style.color = "#00FFFF";
+      ghostModeElement.style.fontFamily = "Arial, sans-serif";
+      ghostModeElement.style.fontSize = "20px";
+      document.body.appendChild(ghostModeElement);
+    }
+
+    if (this.modeState.forcedEnemyType !== undefined) {
+      // Determine text based on ghost mode state
+      let ghostText = this.modeState.ghostMode ? "GHOST MODE: ACTIVE" : "";
+      // Add enemy type info
+      ghostText += ghostText ? "<br>" : "";
+      ghostText += `SPAWNING ENEMY TYPE: ${this.modeState.forcedEnemyType}`;
+      
+      // Update display
+      ghostModeElement.innerHTML = ghostText;
+      ghostModeElement.style.display = "block";
+    } else if (!this.modeState.ghostMode) {
+      // Hide display if not in ghost mode and not forcing enemy type
       ghostModeElement.style.display = "none";
     }
+  }
+
+  // Cycle to the next enemy type (0-9) or start from 0
+  private cycleEnemyType(): void {
+    if (this.modeState.forcedEnemyType === undefined) {
+      this.modeState.forcedEnemyType = 0;
+    } else {
+      this.modeState.forcedEnemyType = (this.modeState.forcedEnemyType + 1) % 10;
+    }
+    
+    // Update the UI to show which enemy type is being forced
+    this.updateForcedEnemyTypeDisplay();
+  }
+
+  // Reset to random enemy spawning
+  private resetEnemySpawning(): void {
+    this.modeState.forcedEnemyType = undefined;
+    
+    // Update the UI
+    this.updateForcedEnemyTypeDisplay();
   }
 
   // The getLevelType method is no longer needed as we use the LevelType enum directly
@@ -678,6 +744,12 @@ export class ActiveMode implements GameMode {
         break;
       case "g": // Add "g" key to toggle ghost mode
         this.toggleGhostMode();
+        break;
+      case "e": // Add "e" key to force spawn specific enemy type
+        this.cycleEnemyType();
+        break;
+      case "E": // Add "E" key to return to random enemy spawning
+        this.resetEnemySpawning();
         break;
     }
   }

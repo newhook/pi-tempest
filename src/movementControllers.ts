@@ -409,27 +409,27 @@ export class HomingMovementController extends BaseMovementController {
       0.8,
       this.enemy.distanceFromCenter / levelRadius
     );
-    const turnRate = 0.8 + distanceFactor * 0.4; // 0.8-1.2 range
+    const turnRate = 1.5 + distanceFactor * 1.0; // Increased turn rate for more responsive homing
 
     // Apply distance-based behavior dampening
     // Reduce oscillation as enemies get closer to edge (where player is)
     const proximityDampen =
-      1 - (this.enemy.distanceFromCenter / levelRadius) * 0.8;
+      1 - (this.enemy.distanceFromCenter / levelRadius) * 0.5;
 
     // 1. Subtle "hunting" oscillation - reduced when close to player
     const huntingOscillation =
-      Math.sin(this.enemy.distanceFromCenter * 2) * 0.02 * proximityDampen;
+      Math.sin(this.enemy.distanceFromCenter * 2) * 0.01 * proximityDampen;
 
     // 2. Very mild course corrections - also reduced when close
     const courseCorrection =
-      Math.sin(this.enemy.distanceFromCenter * 3) * 0.02 * proximityDampen;
+      Math.sin(this.enemy.distanceFromCenter * 3) * 0.01 * proximityDampen;
 
     // 3. Extremely tiny random jitter - just for a touch of life
-    const tinyJitter = (Math.random() - 0.5) * 0.01 * proximityDampen;
+    const tinyJitter = (Math.random() - 0.5) * 0.005 * proximityDampen;
 
     // Apply basic smooth tracking with minimal irregularities
     // Strict limit on maximum turn per frame
-    const maxTurnPerFrame = 0.04; // About 2.3 degrees max per frame
+    const maxTurnPerFrame = 0.08; // Increased max turn for better responsiveness
 
     // Calculate total turn amount with reduced irregularities
     let totalTurn =
@@ -443,11 +443,11 @@ export class HomingMovementController extends BaseMovementController {
     if (totalTurn < -maxTurnPerFrame) totalTurn = -maxTurnPerFrame;
 
     // Apply the turn
-    const newAngle = this.angle + totalTurn;
+    this.angle = this.angle + totalTurn;
 
     // Calculate new position
-    const x = Math.cos(newAngle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(newAngle) * this.enemy.distanceFromCenter;
+    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
+    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
 
     return { x, y };
   }
