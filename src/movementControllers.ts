@@ -5,13 +5,7 @@ import { Enemy } from "./enemy";
 // Base class for all movement controllers
 abstract class BaseMovementController implements MovementController {
   protected enemy: Enemy;
-
-  constructor() {
-    // Initialize with empty enemy - will be set in initialize()
-    this.enemy = null as unknown as Enemy;
-  }
-
-  initialize(enemy: Enemy, params?: any): void {
+  constructor(enemy: Enemy) {
     this.enemy = enemy;
   }
 
@@ -28,6 +22,10 @@ abstract class BaseMovementController implements MovementController {
 
 // Simple spoke movement - straight outward along spokes
 export class SpokeMovementController extends BaseMovementController {
+  constructor(enemy: Enemy) {
+    super(enemy);
+  }
+
   update(delta: number): { x: number; y: number; angle: number } {
     // Just move outward along the original angle
     const x = Math.cos(this.enemy.angle) * this.enemy.distanceFromCenter;
@@ -39,17 +37,18 @@ export class SpokeMovementController extends BaseMovementController {
 
 // Spoke crossing movement - crosses between neighboring spokes
 export class SpokeCrossingMovementController extends BaseMovementController {
-  initialize(enemy: Enemy, params?: any): void {
-    super.initialize(enemy);
+  // For spoke movement
+  private spokeIndex: number;
+  private spokeCrossingDirection?: number;
+  private spokeCrossingSpeed?: number;
 
-    // Initialize spoke crossing specific parameters if not set
-    if (!enemy.spokeCrossingDirection) {
-      enemy.spokeCrossingDirection = Math.random() > 0.5 ? 1 : -1;
-    }
-
-    if (!enemy.spokeCrossingSpeed) {
-      enemy.spokeCrossingSpeed = 0.01 + Math.random() * 0.03;
-    }
+  constructor(enemy: Enemy) {
+    super(enemy);
+    this.spokeIndex = Math.floor(
+      (enemy.angle / (Math.PI * 2)) * enemy.level.getSpokeCount()
+    );
+    this.spokeCrossingDirection = Math.random() > 0.5 ? 1 : -1; // clockwise or counterclockwise
+    this.spokeCrossingSpeed = 0.01 + Math.random() * 0.03; // random speed for crossing
 
     // Note: The numSpokes is handled in the Enemy.update method and doesn't
     // need to be initialized here. The controller will get the correct
@@ -68,8 +67,8 @@ export class SpokeCrossingMovementController extends BaseMovementController {
 
       // Gradually shift the angle based on distance from center
       this.enemy.angle +=
-        this.enemy.spokeCrossingDirection! *
-        this.enemy.spokeCrossingSpeed! *
+        this.spokeCrossingDirection! *
+        this.spokeCrossingSpeed! *
         crossFactor *
         delta *
         10;
@@ -96,8 +95,8 @@ export class ZigzagMovementController extends BaseMovementController {
 
   private extensionLine?: THREE.Line;
 
-  initialize(enemy: Enemy, params?: any): void {
-    super.initialize(enemy);
+  constructor(enemy: Enemy) {
+    super(enemy);
 
     const numSpokes = enemy.level.getSpokeCount();
 
@@ -326,6 +325,9 @@ export class ZigzagMovementController extends BaseMovementController {
 
 // Circular movement - orbits instead of moving outward
 export class CircularMovementController extends BaseMovementController {
+  constructor(enemy: Enemy) {
+    super(enemy);
+  }
   update(delta: number): { x: number; y: number; angle: number } {
     // Increment angle for circular motion
     const newAngle = this.enemy.angle + delta * 0.5;
@@ -339,6 +341,9 @@ export class CircularMovementController extends BaseMovementController {
 
 // Homing movement - enemy seeks the player
 export class HomingMovementController extends BaseMovementController {
+  constructor(enemy: Enemy) {
+    super(enemy);
+  }
   update(delta: number): { x: number; y: number; angle: number } {
     const levelRadius = this.enemy.level.getRadius();
     // Get current enemy position
@@ -421,17 +426,32 @@ export class HomingMovementController extends BaseMovementController {
 
 // Pi movement - follows Pi symbol
 export class PiMovementController extends BaseMovementController {
+  private pathParams?: {
+    startAngle: number;
+    spiralTightness: number;
+    waveAmplitude: number;
+    waveFrequency: number;
+    pathOffset: number;
+  };
+  constructor(enemy: Enemy) {
+    super(enemy);
+    this.pathParams = {
+      startAngle: enemy.angle,
+      spiralTightness: 0.1,
+      waveAmplitude: 0.7,
+      waveFrequency: 3.0,
+      pathOffset: Math.random() * Math.PI * 2,
+    };
+  }
+
   update(delta: number): { x: number; y: number; angle: number } {
     const levelRadius = this.enemy.level.getRadius();
     let x, y;
     let angle = this.enemy.angle;
 
     // Always ensure enemies of type 8 and 9 have pathParams for Pi movement
-    if (
-      (this.enemy.type === 8 || this.enemy.type === 9) &&
-      !this.enemy.pathParams
-    ) {
-      this.enemy.pathParams = {
+    if ((this.enemy.type === 8 || this.enemy.type === 9) && !this.pathParams) {
+      this.pathParams = {
         startAngle: angle,
         spiralTightness: 0.1,
         waveAmplitude: 0.7,
@@ -440,7 +460,7 @@ export class PiMovementController extends BaseMovementController {
       };
     }
 
-    if (this.enemy.pathParams) {
+    if (this.pathParams) {
       // Calculate position along pi symbol
       // The pi symbol consists of:
       // 1. A horizontal bar at the top
@@ -483,7 +503,7 @@ export class PiMovementController extends BaseMovementController {
       if (normalizedDist < 0.3) {
         // Initial approach from center
         x =
-          this.enemy.pathParams.startAngle < Math.PI
+          this.pathParams.startAngle < Math.PI
             ? -normalizedDist * levelRadius * 0.5
             : normalizedDist * levelRadius * 0.5;
         y = -normalizedDist * levelRadius * 0.5;
@@ -491,7 +511,7 @@ export class PiMovementController extends BaseMovementController {
         // Moving to horizontal bar position
         const t = (normalizedDist - 0.3) / 0.2;
         x =
-          this.enemy.pathParams.startAngle < Math.PI
+          this.pathParams.startAngle < Math.PI
             ? -levelRadius * 0.5 + t * levelRadius
             : levelRadius * 0.5 - t * levelRadius;
         y = -levelRadius * 0.15;
@@ -499,34 +519,34 @@ export class PiMovementController extends BaseMovementController {
         // Moving down vertical line - default positions
         // Determine which leg of Pi to follow based on angle
         let legPosition;
-        if (this.enemy.pathParams.startAngle < Math.PI * 0.67) {
+        if (this.pathParams.startAngle < Math.PI * 0.67) {
           legPosition = -levelRadius * 0.4; // Left leg
-        } else if (this.enemy.pathParams.startAngle < Math.PI * 1.33) {
+        } else if (this.pathParams.startAngle < Math.PI * 1.33) {
           legPosition = 0; // Middle (for type 9)
         } else {
           legPosition = levelRadius * 0.4; // Right leg
         }
 
         // For crossing pi, allow swapping between legs
-        if (this.enemy.movementStyle === "piCrossing" && normalizedDist > 0.7) {
-          const crossPhase = Math.floor((normalizedDist - 0.7) * 10);
-          if (crossPhase % 2 === 1) {
-            // Periodically swap legs
-            if (legPosition === -levelRadius * 0.4) {
-              legPosition = 0;
-            } else if (legPosition === 0) {
-              legPosition =
-                legPosition === -levelRadius * 0.4
-                  ? levelRadius * 0.4
-                  : -levelRadius * 0.4;
-            } else {
-              legPosition = 0;
-            }
-          }
+        // if (this.enemy.movementStyle === "piCrossing" && normalizedDist > 0.7) {
+        //   const crossPhase = Math.floor((normalizedDist - 0.7) * 10);
+        //   if (crossPhase % 2 === 1) {
+        //     // Periodically swap legs
+        //     if (legPosition === -levelRadius * 0.4) {
+        //       legPosition = 0;
+        //     } else if (legPosition === 0) {
+        //       legPosition =
+        //         legPosition === -levelRadius * 0.4
+        //           ? levelRadius * 0.4
+        //           : -levelRadius * 0.4;
+        //     } else {
+        //       legPosition = 0;
+        //     }
+        //   }
 
-          // Add some subtle horizontal oscillation
-          legPosition += Math.sin(normalizedDist * 15) * 0.1 * levelRadius;
-        }
+        //   // Add some subtle horizontal oscillation
+        //   legPosition += Math.sin(normalizedDist * 15) * 0.1 * levelRadius;
+        // }
 
         x = legPosition;
         y = -levelRadius * 0.15 - (normalizedDist - 0.5) * levelRadius * 0.85;
@@ -545,24 +565,45 @@ export class PiMovementController extends BaseMovementController {
 
 // Spiral movement
 export class SpiralMovementController extends BaseMovementController {
+  private pathParams?: {
+    startAngle: number;
+    spiralTightness: number;
+    waveAmplitude: number;
+    waveFrequency: number;
+    pathOffset: number;
+  };
+  constructor(enemy: Enemy) {
+    super(enemy);
+    this.pathParams = {
+      startAngle: enemy.angle,
+      spiralTightness: 0.1 + Math.random() * 0.3,
+      waveAmplitude: 0.5 + Math.random() * 1.2,
+      waveFrequency: 2 + Math.random() * 4,
+      pathOffset: Math.random() * Math.PI * 2,
+    };
+  }
   update(delta: number): { x: number; y: number; angle: number } {
     let angle = this.enemy.angle;
 
     // Spiral path - angle changes as distance increases
-    if (this.enemy.pathParams) {
-      if (this.enemy.movementStyle === "spiralCrossing") {
-        // Add cross-path variation to the spiral
-        angle =
-          this.enemy.pathParams.startAngle +
-          this.enemy.distanceFromCenter *
-            this.enemy.pathParams.spiralTightness +
-          Math.sin(this.enemy.distanceFromCenter * 0.2) * 0.5; // Add oscillation for crossing
-      } else {
-        // Regular spiral
-        angle =
-          this.enemy.pathParams.startAngle +
-          this.enemy.distanceFromCenter * this.enemy.pathParams.spiralTightness;
-      }
+    if (this.pathParams) {
+      // if (this.enemy.movementStyle === "spiralCrossing") {
+      //   // Add cross-path variation to the spiral
+      //   angle =
+      //     this.pathParams.startAngle +
+      //     this.enemy.distanceFromCenter *
+      //       this.pathParams.spiralTightness +
+      //     Math.sin(this.enemy.distanceFromCenter * 0.2) * 0.5; // Add oscillation for crossing
+      // } else {
+      //   // Regular spiral
+      //   angle =
+      //     this.pathParams.startAngle +
+      //     this.enemy.distanceFromCenter * this.pathParams.spiralTightness;
+      // }
+      // Regular spiral
+      angle =
+        this.pathParams.startAngle +
+        this.enemy.distanceFromCenter * this.pathParams.spiralTightness;
     }
 
     const x = Math.cos(angle) * this.enemy.distanceFromCenter;
@@ -574,42 +615,58 @@ export class SpiralMovementController extends BaseMovementController {
 
 // Wave movement
 export class WaveMovementController extends BaseMovementController {
+  private pathParams?: {
+    startAngle: number;
+    spiralTightness: number;
+    waveAmplitude: number;
+    waveFrequency: number;
+    pathOffset: number;
+  };
+  constructor(enemy: Enemy) {
+    super(enemy);
+    this.pathParams = {
+      startAngle: enemy.angle,
+      spiralTightness: 0.1 + Math.random() * 0.3,
+      waveAmplitude: 0.5 + Math.random() * 1.2,
+      waveFrequency: 2 + Math.random() * 4,
+      pathOffset: Math.random() * Math.PI * 2,
+    };
+  }
   update(delta: number): { x: number; y: number; angle: number } {
     const levelRadius = this.enemy.level.getRadius();
     let angle = this.enemy.angle;
 
     // Wave path - sinusoidal movement
-    if (this.enemy.pathParams) {
+    if (this.pathParams) {
       // Base angle determines the spoke we're moving along
-      const baseAngle = this.enemy.pathParams.startAngle;
+      const baseAngle = this.pathParams.startAngle;
 
       // Calculate wave offset
       let waveOffset =
         (Math.sin(
-          (this.enemy.distanceFromCenter *
-            this.enemy.pathParams.waveFrequency) /
+          (this.enemy.distanceFromCenter * this.pathParams.waveFrequency) /
             levelRadius
         ) *
-          this.enemy.pathParams.waveAmplitude) /
+          this.pathParams.waveAmplitude) /
         levelRadius;
 
-      // For crossing waves, add an additional perpendicular wave component
-      if (this.enemy.movementStyle === "waveCrossing") {
-        // Add a secondary wave that's out of phase
-        const secondaryWave =
-          (Math.cos(
-            (this.enemy.distanceFromCenter *
-              this.enemy.pathParams.waveFrequency *
-              1.5) /
-              levelRadius
-          ) *
-            this.enemy.pathParams.waveAmplitude *
-            0.7) /
-          levelRadius;
+      // // For crossing waves, add an additional perpendicular wave component
+      // if (this.enemy.movementStyle === "waveCrossing") {
+      //   // Add a secondary wave that's out of phase
+      //   const secondaryWave =
+      //     (Math.cos(
+      //       (this.enemy.distanceFromCenter *
+      //         this.pathParams.waveFrequency *
+      //         1.5) /
+      //         levelRadius
+      //     ) *
+      //       this.pathParams.waveAmplitude *
+      //       0.7) /
+      //     levelRadius;
 
-        // Combine the waves
-        waveOffset += secondaryWave;
-      }
+      //   // Combine the waves
+      //   waveOffset += secondaryWave;
+      // }
 
       angle = baseAngle + waveOffset;
     }
@@ -623,38 +680,55 @@ export class WaveMovementController extends BaseMovementController {
 
 // Star movement
 export class StarMovementController extends BaseMovementController {
+  private pathParams?: {
+    startAngle: number;
+    spiralTightness: number;
+    waveAmplitude: number;
+    waveFrequency: number;
+    pathOffset: number;
+  };
+  constructor(enemy: Enemy) {
+    super(enemy);
+    this.pathParams = {
+      startAngle: enemy.angle,
+      spiralTightness: 0.1 + Math.random() * 0.3,
+      waveAmplitude: 0.5 + Math.random() * 1.2,
+      waveFrequency: 2 + Math.random() * 4,
+      pathOffset: Math.random() * Math.PI * 2,
+    };
+  }
   update(delta: number): { x: number; y: number; angle: number } {
     const levelRadius = this.enemy.level.getRadius();
     let x, y;
     let angle = this.enemy.angle;
 
     // Star path
-    if (this.enemy.pathParams) {
+    if (this.pathParams) {
       // Number of star points increases with level
       const starPoints =
-        3 + (Math.floor(this.enemy.pathParams.waveFrequency * 2) % 5);
+        3 + (Math.floor(this.pathParams.waveFrequency * 2) % 5);
       const pointAngle = (Math.PI * 2) / starPoints;
 
       // Calculate which point we're moving toward
       let pointIndex = Math.floor(
-        (this.enemy.pathParams.startAngle / (Math.PI * 2)) * starPoints
+        (this.pathParams.startAngle / (Math.PI * 2)) * starPoints
       );
 
-      // For crossing stars, occasionally jump to a different point
-      if (this.enemy.movementStyle === "starCrossing") {
-        const jumpPhase = Math.floor(
-          this.enemy.distanceFromCenter / (levelRadius * 0.2)
-        );
-        if (
-          jumpPhase % 3 === 0 &&
-          this.enemy.distanceFromCenter > levelRadius * 0.3
-        ) {
-          // Jump to a different point randomly
-          pointIndex =
-            (pointIndex + 1 + Math.floor(Math.random() * (starPoints - 2))) %
-            starPoints;
-        }
-      }
+      // // For crossing stars, occasionally jump to a different point
+      // if (this.enemy.movementStyle === "starCrossing") {
+      //   const jumpPhase = Math.floor(
+      //     this.enemy.distanceFromCenter / (levelRadius * 0.2)
+      //   );
+      //   if (
+      //     jumpPhase % 3 === 0 &&
+      //     this.enemy.distanceFromCenter > levelRadius * 0.3
+      //   ) {
+      //     // Jump to a different point randomly
+      //     pointIndex =
+      //       (pointIndex + 1 + Math.floor(Math.random() * (starPoints - 2))) %
+      //       starPoints;
+      //   }
+      // }
 
       const nextPointIndex = (pointIndex + 1) % starPoints;
 
@@ -676,17 +750,17 @@ export class StarMovementController extends BaseMovementController {
       if (toOuter) {
         // Moving to outer point
         targetAngle = currentPointAngle;
-        if (this.enemy.movementStyle === "starCrossing") {
-          // Add slight wobble when moving to points
-          targetAngle += Math.sin(this.enemy.distanceFromCenter * 2) * 0.1;
-        }
+        // if (this.enemy.movementStyle === "starCrossing") {
+        //   // Add slight wobble when moving to points
+        //   targetAngle += Math.sin(this.enemy.distanceFromCenter * 2) * 0.1;
+        // }
       } else {
         // Moving to inner corner
         targetAngle = currentPointAngle + pointAngle / 2;
-        if (this.enemy.movementStyle === "starCrossing") {
-          // Add slight wobble when moving to corners
-          targetAngle += Math.cos(this.enemy.distanceFromCenter * 3) * 0.15;
-        }
+        // if (this.enemy.movementStyle === "starCrossing") {
+        //   // Add slight wobble when moving to corners
+        //   targetAngle += Math.cos(this.enemy.distanceFromCenter * 3) * 0.15;
+        // }
       }
 
       angle = targetAngle;
@@ -714,6 +788,9 @@ export class StarMovementController extends BaseMovementController {
 
 // Erratic movement
 export class ErraticMovementController extends BaseMovementController {
+  constructor(enemy: Enemy) {
+    super(enemy);
+  }
   update(delta: number): { x: number; y: number; angle: number } {
     const levelRadius = this.enemy.level.getRadius();
     // Very erratic zig-zag with random direction changes
@@ -733,10 +810,27 @@ export class ErraticMovementController extends BaseMovementController {
 
 // Bounce movement
 export class BounceMovementController extends BaseMovementController {
+  private pathParams?: {
+    startAngle: number;
+    spiralTightness: number;
+    waveAmplitude: number;
+    waveFrequency: number;
+    pathOffset: number;
+  };
+  constructor(enemy: Enemy) {
+    super(enemy);
+    this.pathParams = {
+      startAngle: enemy.angle,
+      spiralTightness: 0.1 + Math.random() * 0.3,
+      waveAmplitude: 0.5 + Math.random() * 1.2,
+      waveFrequency: 2 + Math.random() * 4,
+      pathOffset: Math.random() * Math.PI * 2,
+    };
+  }
   update(delta: number): { x: number; y: number; angle: number } {
     const levelRadius = this.enemy.level.getRadius();
     let distanceFromCenter = this.enemy.distanceFromCenter;
-    const angle = this.enemy.pathParams?.startAngle || this.enemy.angle;
+    const angle = this.pathParams?.startAngle || this.enemy.angle;
 
     // Calculate bounce effect
     const bouncePhase = Math.floor(distanceFromCenter / (levelRadius * 0.2));
@@ -760,6 +854,9 @@ export class BounceMovementController extends BaseMovementController {
 
 // Linear movement with direction vector
 export class LinearMovementController extends BaseMovementController {
+  constructor(enemy: Enemy) {
+    super(enemy);
+  }
   update(delta: number): { x: number; y: number; angle: number } {
     const levelRadius = this.enemy.level.getRadius();
     let x, y;
@@ -778,44 +875,5 @@ export class LinearMovementController extends BaseMovementController {
     }
 
     return { x, y, angle: this.enemy.angle };
-  }
-}
-
-// Factory function to create the appropriate movement controller
-export function createMovementController(
-  movementStyle: string
-): MovementController {
-  switch (movementStyle) {
-    case "spoke":
-      return new SpokeMovementController();
-    case "spokeCrossing":
-      return new SpokeCrossingMovementController();
-    case "zigzag":
-      return new ZigzagMovementController();
-    case "circular":
-      return new CircularMovementController();
-    case "homing":
-      return new HomingMovementController();
-    case "pi":
-    case "piCrossing":
-      return new PiMovementController();
-    case "spiral":
-    case "spiralCrossing":
-      return new SpiralMovementController();
-    case "wave":
-    case "waveCrossing":
-      return new WaveMovementController();
-    case "star":
-    case "starCrossing":
-      return new StarMovementController();
-    case "erratic":
-      return new ErraticMovementController();
-    case "bounce":
-      return new BounceMovementController();
-    case "linear":
-      return new LinearMovementController();
-    default:
-      // Default to spoke movement
-      return new SpokeMovementController();
   }
 }

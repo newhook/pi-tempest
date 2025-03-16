@@ -33,9 +33,6 @@ export interface Bullet {
 
 // Interface for enemy movement controllers
 export interface MovementController {
-  // Initialize the controller with any needed parameters
-  initialize(enemy: any, params?: any): void;
-
   // Update enemy position based on current state
   update(delta: number): { x: number; y: number; angle: number };
 

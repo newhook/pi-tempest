@@ -1,7 +1,20 @@
 import * as THREE from "three";
 import { GameState, ActiveModeState, MovementController } from "./types";
-import { createMovementController } from "./movementControllers";
-import { Level } from "./levels";
+import {
+  SpokeMovementController,
+  SpokeCrossingMovementController,
+  ZigzagMovementController,
+  CircularMovementController,
+  HomingMovementController,
+  PiMovementController,
+  SpiralMovementController,
+  WaveMovementController,
+  StarMovementController,
+  ErraticMovementController,
+  BounceMovementController,
+  LinearMovementController,
+} from "./movementControllers";
+import { Level, LevelType } from "./levels";
 
 // Class representing an individual enemy
 export class Enemy {
@@ -12,12 +25,7 @@ export class Enemy {
   public type: number;
   public size: number;
   public hitPoints: number;
-  public movementStyle: string;
   public direction?: THREE.Vector2;
-  // For spoke movement
-  public spokeIndex?: number;
-  public spokeCrossingDirection?: number;
-  public spokeCrossingSpeed?: number;
   public gameState: GameState; // Changed to public for access by controllers
   public modeState: ActiveModeState; // Changed to public for access by controllers
   public scene: THREE.Scene; // Changed to public for access by controllers
@@ -29,50 +37,105 @@ export class Enemy {
   // Movement controller to handle specific movement patterns
   private movementController: MovementController;
 
-  public pathParams?: {
-    startAngle: number;
-    spiralTightness: number;
-    waveAmplitude: number;
-    waveFrequency: number;
-    pathOffset: number;
-  };
-
   constructor(
     level: Level,
     mesh: THREE.Mesh,
-    angle: number,
-    distanceFromCenter: number,
-    speed: number,
     type: number,
-    size: number,
-    hitPoints: number,
-    movementStyle: string,
     scene: THREE.Scene,
     gameState: GameState,
-    modeState: ActiveModeState,
-    direction?: THREE.Vector2
+    modeState: ActiveModeState
   ) {
     this.mesh = mesh;
-    this.angle = angle;
-    this.distanceFromCenter = distanceFromCenter;
-    this.speed = speed;
+    this.distanceFromCenter = 0;
     this.type = type;
-    this.size = size;
-    this.hitPoints = hitPoints;
-    this.movementStyle = movementStyle;
     this.scene = scene;
     this.gameState = gameState;
     this.modeState = modeState;
-    this.direction = direction;
     this.level = level;
 
-    // Create the appropriate movement controller based on movement style
-    this.movementController = createMovementController(movementStyle);
+    // Get the current level type
+    const levelType = level.levelType;
 
-    // Initialize the controller with this enemy
-    // Note: The numSpokes from enemy is already accessible to the controller
-    // and will be properly set during the first update call
-    this.movementController.initialize(this);
+    // Generate a random angle for initial positioning
+    // Add random offset to ensure enemies don't all follow the same path
+    this.angle = Math.random() * Math.PI * 2;
+
+    // Assign movement style based on enemy type
+    switch (type) {
+      case 0: // Type 0: Always follows spokes
+        // Always use spoke movement regardless of level type
+        this.movementController = new SpokeMovementController(this);
+        break;
+
+      case 1: // Type 1: Always follows spokes but can cross between them
+        // Always use spoke crossing regardless of level type
+        this.movementController = new SpokeCrossingMovementController(this);
+        break;
+
+      case 2: // Type 2: Follows patterns but moves faster (speed is handled later)
+        // Same as type 0 but with speed multiplier (applied below)
+        this.movementController = new SpokeMovementController(this);
+        break;
+
+      case 3: // Type 3: Zigzag movement
+        this.movementController = new ZigzagMovementController(this);
+        break;
+
+      case 4: // Type 4: Circular orbit movement
+        this.movementController = new CircularMovementController(this);
+        break;
+
+      case 5: // Type 5: Bouncing movement
+        this.movementController = new BounceMovementController(this);
+        break;
+
+      case 6: // Type 6: Erratic movement
+        this.movementController = new ErraticMovementController(this);
+        break;
+
+      case 7: // Type 7: Homing movement (tries to follow player)
+        this.movementController = new HomingMovementController(this);
+        break;
+
+      case 8: // Type 8: Follows Pi symbol on Pi level (4) and level 5, otherwise uses spokes
+        // Force Pi movement if on pi level or level 5 (wave level)
+        if (levelType === LevelType.PiSymbol) {
+          this.movementController = new PiMovementController(this);
+        } else {
+          this.movementController = new SpokeMovementController(this);
+        }
+        break;
+
+      case 9: // Type 9: Only on Pi level and follows Pi symbol, otherwise uses spokes
+        // Force Pi movement if on pi level
+        if (levelType === LevelType.PiSymbol) {
+          this.movementController = new PiMovementController(this);
+        } else {
+          this.movementController = new SpokeMovementController(this);
+        }
+        break;
+
+      case 10: // Type 10:  linear movement
+        const angle = Math.random() * Math.PI * 2;
+        this.direction = new THREE.Vector2(Math.cos(angle), Math.sin(angle));
+        this.angle = Math.atan2(this.direction.y, this.direction.x);
+        this.distanceFromCenter = Math.sqrt(
+          mesh.position.x * mesh.position.x + mesh.position.y * mesh.position.y
+        );
+        this.movementController = new LinearMovementController(this);
+        break;
+
+      default:
+        this.movementController = new SpokeMovementController(this);
+    }
+
+    // Assign hitpoints and speed based on enemy type
+    const { hitPoints, speedMultiplier } = this.getBehavior();
+    this.hitPoints = hitPoints;
+    this.speed = this.modeState.enemySpeed * speedMultiplier;
+
+    // Randomize size slightly
+    this.size = 0.3 + this.type / 20 + Math.random() * 0.1;
   }
 
   // Update enemy position based on movement style
@@ -287,12 +350,12 @@ export class Enemy {
   }
 
   // Get behavior attributes based on enemy type
-  static getBehavior(enemyType: number): {
+  private getBehavior(): {
     hitPoints: number;
     speedMultiplier: number;
     movementStyle: string;
   } {
-    switch (enemyType) {
+    switch (this.type) {
       case 0: // Standard follower - always follows spokes
         return {
           hitPoints: 1,
@@ -471,28 +534,13 @@ export class Enemy {
       // Ensure the smaller spheres start at the position of the original enemy
       mesh.position.set(position.x, position.y, position.z);
 
-      // Randomize direction
-      const angle = Math.random() * Math.PI * 2;
-      const randomDirection = new THREE.Vector2(
-        Math.cos(angle),
-        Math.sin(angle)
-      );
-
-      // Create the enemy with a reference to scene, gameState, and modeState
       const enemy = new Enemy(
+        this.level,
         mesh,
-        Math.atan2(randomDirection.y, randomDirection.x),
-        Math.sqrt(position.x * position.x + position.y * position.y),
-        this.modeState.enemySpeed * 1.5, // Slightly faster than original
-        -1, // Special type for smaller spheres
-        0.2,
-        1,
-        "linear",
+        10, // Type 10 for small spheres
         this.scene,
         this.gameState,
-        this.modeState,
-        this.spokes,
-        randomDirection
+        this.modeState
       );
 
       this.scene.add(mesh);

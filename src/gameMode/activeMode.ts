@@ -111,7 +111,7 @@ export class ActiveMode implements GameMode {
     }
 
     // Update enemies
-    this.enemyManager.update(delta);
+    this.enemyManager.update(delta, this.level);
 
     // Update player bullets
     this.updateBullets(delta);

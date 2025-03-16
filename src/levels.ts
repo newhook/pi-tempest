@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { Enemy } from "./enemy";
 
 export enum LevelType {
   Circle = 0,
@@ -9,11 +10,11 @@ export enum LevelType {
 }
 
 export interface SpokePosition {
-  angle: number;       // Angle of the spoke in radians
-  outerX: number;      // X coordinate at outer end of spoke
-  outerY: number;      // Y coordinate at outer end of spoke
-  innerX: number;      // X coordinate at inner end of spoke (usually 0)
-  innerY: number;      // Y coordinate at inner end of spoke (usually 0)
+  angle: number; // Angle of the spoke in radians
+  outerX: number; // X coordinate at outer end of spoke
+  outerY: number; // Y coordinate at outer end of spoke
+  innerX: number; // X coordinate at inner end of spoke (usually 0)
+  innerY: number; // Y coordinate at inner end of spoke (usually 0)
 }
 
 export class Level {
@@ -102,10 +103,15 @@ export class Level {
   public getRadius(): number {
     return this.radius;
   }
-  
+
   // Helper method to get the spoke positions
   public getSpokePositions(): SpokePosition[] {
     return this.spokePositions;
+  }
+
+  public collidesWithEnemy(enemy: Enemy): boolean {
+    // XXX: this isn't correct. It should check the outer geometry of the level.
+    return enemy.isOffscreen(this.radius);
   }
 
   // Create a basic circular level
@@ -128,25 +134,25 @@ export class Level {
     // Add "spokes" radiating from center
     this.spokeCount = 16;
     const spokeGeometry = new THREE.BufferGeometry();
-    
+
     // Clear any existing spoke positions
     this.spokePositions = [];
-    
+
     const positions = [];
     for (let i = 0; i < this.spokeCount; i++) {
       const angle = (i / this.spokeCount) * Math.PI * 2;
       const outerX = Math.cos(angle) * this.radius;
       const outerY = Math.sin(angle) * this.radius;
-      
+
       // Store spoke positions for enemy controllers
       this.spokePositions.push({
         angle: angle,
         outerX: outerX,
         outerY: outerY,
         innerX: 0,
-        innerY: 0
+        innerY: 0,
       });
-      
+
       // Add to positions for rendering
       positions.push(0, 0, 0);
       positions.push(outerX, outerY, 0);
@@ -216,7 +222,7 @@ export class Level {
     // Add spokes radiating from center
     this.spokeCount = 20;
     const spokeGeometry = new THREE.BufferGeometry();
-    
+
     // Clear any existing spoke positions
     this.spokePositions = [];
 
@@ -225,16 +231,16 @@ export class Level {
       const angle = (i / this.spokeCount) * Math.PI * 2;
       const outerX = Math.cos(angle) * this.radius;
       const outerY = Math.sin(angle) * this.radius;
-      
+
       // Store spoke positions for enemy controllers
       this.spokePositions.push({
         angle: angle,
         outerX: outerX,
         outerY: outerY,
         innerX: 0,
-        innerY: 0
+        innerY: 0,
       });
-      
+
       positions.push(0, 0, 0);
       positions.push(outerX, outerY, 0);
     }
@@ -306,7 +312,7 @@ export class Level {
     this.spokeCount = points;
     const spokeGeometry = new THREE.BufferGeometry();
     const spokeVertices = [];
-    
+
     // Clear any existing spoke positions
     this.spokePositions = [];
 
@@ -316,16 +322,16 @@ export class Level {
       const angle = (i / (points * 2)) * Math.PI * 2;
       const outerX = Math.cos(angle) * this.radius;
       const outerY = Math.sin(angle) * this.radius;
-      
+
       // Store spoke positions for enemy controllers
       this.spokePositions.push({
         angle: angle,
         outerX: outerX,
         outerY: outerY,
         innerX: 0,
-        innerY: 0
+        innerY: 0,
       });
-      
+
       spokeVertices.push(0, 0, 0); // Center
       spokeVertices.push(outerX, outerY, 0); // Outer point
     }
@@ -409,7 +415,7 @@ export class Level {
     // Add spokes radiating from center
     this.spokeCount = 18;
     const spokeGeometry = new THREE.BufferGeometry();
-    
+
     // Clear any existing spoke positions
     this.spokePositions = [];
 
@@ -418,16 +424,16 @@ export class Level {
       const angle = (i / this.spokeCount) * Math.PI * 2;
       const outerX = Math.cos(angle) * this.radius;
       const outerY = Math.sin(angle) * this.radius;
-      
+
       // Store spoke positions for enemy controllers
       this.spokePositions.push({
         angle: angle,
         outerX: outerX,
         outerY: outerY,
         innerX: 0,
-        innerY: 0
+        innerY: 0,
       });
-      
+
       positions.push(0, 0, 0);
       positions.push(outerX, outerY, 0);
     }
@@ -501,7 +507,7 @@ export class Level {
     // Add spokes radiating from center
     this.spokeCount = 24;
     const spokeGeometry = new THREE.BufferGeometry();
-    
+
     // Clear any existing spoke positions
     this.spokePositions = [];
 
@@ -513,16 +519,16 @@ export class Level {
       const waveRadius = this.radius + Math.sin(angle * 3.14) * amplitude;
       const outerX = Math.cos(angle) * waveRadius;
       const outerY = Math.sin(angle) * waveRadius;
-      
+
       // Store spoke positions for enemy controllers
       this.spokePositions.push({
         angle: angle,
         outerX: outerX,
         outerY: outerY,
         innerX: 0,
-        innerY: 0
+        innerY: 0,
       });
-      
+
       positions.push(0, 0, 0);
       positions.push(outerX, outerY, 0);
     }
