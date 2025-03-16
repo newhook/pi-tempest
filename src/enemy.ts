@@ -1,288 +1,438 @@
 import * as THREE from "three";
-import { GameState, ActiveModeState } from "./types";
+import { GameState, ActiveModeState, MovementController } from "./types";
+import {
+  SpokeMovementController,
+  SpokeCrossingMovementController,
+  ZigzagMovementController,
+  CircularMovementController,
+  HomingMovementController,
+  PiMovementController,
+  ErraticMovementController,
+  BounceMovementController,
+  LinearMovementController,
+} from "./movementControllers";
+import { Level, LevelType } from "./levels";
 
 // Class representing an individual enemy
 export class Enemy {
   public mesh: THREE.Mesh;
-  public angle: number;
   public distanceFromCenter: number;
   public speed: number;
   public type: number;
   public size: number;
   public hitPoints: number;
-  public movementStyle: string;
-  public direction?: THREE.Vector2;
-  // For spoke movement
-  public spokeIndex?: number;
-  public spokeCrossingDirection?: number;
-  public spokeCrossingSpeed?: number;
-  private gameState: GameState;
-  private modeState: ActiveModeState;
-  private scene: THREE.Scene;
-  // Number of spokes in the current level (needed for spoke movement)
-  private numSpokes: number = 8;
-  public pathParams?: {
-    startAngle: number;
-    spiralTightness: number;
-    waveAmplitude: number;
-    waveFrequency: number;
-    pathOffset: number;
-  };
+  public gameState: GameState; // Changed to public for access by controllers
+  public modeState: ActiveModeState; // Changed to public for access by controllers
+  public scene: THREE.Scene; // Changed to public for access by controllers
+  public level: Level;
+  private lastFireTime: number = 0; // Track time since last bullet fired
+  private movementController: MovementController;
+
+  public static name(type: number): string {
+    switch (type) {
+      case 0:
+        return "Follower";
+      case 1:
+        return "Crosser";
+      case 2:
+        return "Speeder";
+      case 3:
+        return "Zigzagger";
+      case 4:
+        return "Orbiter";
+      case 5:
+        return "Bouncer";
+      case 6:
+        return "Chaotic";
+      case 7:
+        return "Hunter";
+      case 8:
+        return "Pi-follower";
+      case 9:
+        return "Advanced Pi-follower";
+      case 10:
+        return "Shard";
+      default:
+        return "Unknown";
+    }
+  }
 
   constructor(
+    level: Level,
     mesh: THREE.Mesh,
-    angle: number,
-    distanceFromCenter: number,
-    speed: number,
     type: number,
-    size: number,
-    hitPoints: number,
-    movementStyle: string,
     scene: THREE.Scene,
     gameState: GameState,
-    modeState: ActiveModeState,
-    direction?: THREE.Vector2
+    modeState: ActiveModeState
   ) {
     this.mesh = mesh;
-    this.angle = angle;
-    this.distanceFromCenter = distanceFromCenter;
-    this.speed = speed;
+    this.distanceFromCenter = 0;
     this.type = type;
-    this.size = size;
-    this.hitPoints = hitPoints;
-    this.movementStyle = movementStyle;
     this.scene = scene;
     this.gameState = gameState;
     this.modeState = modeState;
-    this.direction = direction;
-  }
+    this.level = level;
 
-  // Update enemy position based on movement style
-  update(delta: number, levelRadius: number, numSpokes: number = 8): void {
-    // Store number of spokes for spoke-based movement
-    if (
-      this.movementStyle === "spoke" ||
-      this.movementStyle === "spokeCrossing"
-    ) {
-      this.numSpokes = numSpokes;
-    }
+    // Get the current level type
+    const levelType = level.levelType;
 
-    // Increment distance from center for all movement types
-    this.distanceFromCenter += this.speed * delta * 30;
+    // Assign hitpoints and speed based on enemy type
+    const { hitPoints, speedMultiplier } = this.getBehavior();
+    this.hitPoints = hitPoints;
+    this.speed = this.modeState.enemySpeed * speedMultiplier;
 
-    // Calculate new position based on movement style
-    let x: number, y: number;
-
-    switch (this.movementStyle) {
-      case "zigzag":
-        this.angle += Math.sin(this.distanceFromCenter / 10) * 0.1;
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
+    // Assign movement style based on enemy type
+    switch (type) {
+      case 0: // Type 0: Always follows spokes
+        // Always use spoke movement regardless of level type
+        this.movementController = new SpokeMovementController(this);
         break;
 
-      case "circular":
-        this.angle += delta * 0.5;
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
+      case 1: // Type 1: Always follows spokes but can cross between them
+        // Always use spoke crossing regardless of level type
+        this.movementController = new SpokeCrossingMovementController(this);
         break;
 
-      case "spiral":
-        // Spiral path - angle changes as distance increases
-        if (this.pathParams) {
-          this.angle =
-            this.pathParams.startAngle +
-            this.distanceFromCenter * this.pathParams.spiralTightness;
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
+      case 2: // Type 2: Follows patterns but moves faster (speed is handled later)
+        // Same as type 0 but with speed multiplier (applied below)
+        this.movementController = new SpokeMovementController(this);
+        break;
+
+      case 3: // Type 3: Zigzag movement
+        this.movementController = new ZigzagMovementController(this);
+        break;
+
+      case 4: // Type 4: Circular orbit movement
+        this.movementController = new CircularMovementController(this);
+        break;
+
+      case 5: // Type 5: Bouncing movement
+        this.movementController = new BounceMovementController(this);
+        break;
+
+      case 6: // Type 6: Erratic movement
+        this.movementController = new ErraticMovementController(this);
+        break;
+
+      case 7: // Type 7: Homing movement (tries to follow player)
+        this.movementController = new HomingMovementController(this);
+        break;
+
+      case 8: // Type 8: Follows Pi symbol on Pi level (4) and level 5, otherwise uses spokes
+        // Force Pi movement if on pi level or level 5 (wave level)
+        if (levelType === LevelType.PiSymbol) {
+          this.movementController = new PiMovementController(this);
         } else {
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
+          this.movementController = new SpokeMovementController(this);
         }
         break;
 
-      case "wave":
-        // Wave path - sinusoidal movement
-        if (this.pathParams) {
-          // Base angle determines the spoke we're moving along
-          const baseAngle = this.pathParams.startAngle;
-          // Add sine wave modulation to angle
-          const waveOffset =
-            (Math.sin(
-              (this.distanceFromCenter * this.pathParams.waveFrequency) /
-                levelRadius
-            ) *
-              this.pathParams.waveAmplitude) /
-            levelRadius;
-
-          this.angle = baseAngle + waveOffset;
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
+      case 9: // Type 9: Only on Pi level and follows Pi symbol, otherwise uses spokes
+        // Force Pi movement if on pi level
+        if (levelType === LevelType.PiSymbol) {
+          this.movementController = new PiMovementController(this);
         } else {
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
+          this.movementController = new SpokeMovementController(this);
         }
         break;
 
-      case "pi":
-        // Pi symbol path
-        if (this.pathParams) {
-          // Calculate position along pi symbol
-          // The pi symbol consists of:
-          // 1. A horizontal bar at the top
-          // 2. Two vertical lines coming down from the bar
-
-          // Normalize distance to create pi symbol within level radius
-          const normalizedDist = this.distanceFromCenter / levelRadius;
-
-          if (normalizedDist < 0.3) {
-            // Initial approach from center
-            x =
-              this.pathParams.startAngle < Math.PI
-                ? -normalizedDist * levelRadius * 0.5
-                : normalizedDist * levelRadius * 0.5;
-            y = -normalizedDist * levelRadius * 0.5;
-          } else if (normalizedDist < 0.5) {
-            // Moving to horizontal bar position
-            const t = (normalizedDist - 0.3) / 0.2;
-            x =
-              this.pathParams.startAngle < Math.PI
-                ? -levelRadius * 0.5 + t * levelRadius
-                : levelRadius * 0.5 - t * levelRadius;
-            y = -levelRadius * 0.15;
-          } else {
-            // Moving down vertical line
-            const legPosition =
-              this.pathParams.startAngle < Math.PI * 0.67
-                ? -levelRadius * 0.4
-                : this.pathParams.startAngle < Math.PI * 1.33
-                ? 0
-                : levelRadius * 0.4;
-            x = legPosition;
-            y =
-              -levelRadius * 0.15 - (normalizedDist - 0.5) * levelRadius * 0.85;
-          }
-
-          // Update angle for proper orientation
-          this.angle = Math.atan2(y, x);
-        } else {
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
-        }
-        break;
-
-      case "star":
-        // Star path
-        if (this.pathParams) {
-          // Number of star points increases with level
-          const starPoints =
-            3 + (Math.floor(this.pathParams.waveFrequency * 2) % 5);
-          const pointAngle = (Math.PI * 2) / starPoints;
-
-          // Calculate which point we're moving toward
-          const pointIndex = Math.floor(
-            (this.pathParams.startAngle / (Math.PI * 2)) * starPoints
-          );
-          const nextPointIndex = (pointIndex + 1) % starPoints;
-
-          // Calculate angle to current and next point
-          const currentPointAngle = pointIndex * pointAngle;
-          const nextPointAngle = nextPointIndex * pointAngle;
-
-          // Interpolate between inner and outer radius
-          const innerRadius = levelRadius * 0.4;
-          const outerRadius = levelRadius;
-
-          // Determine if we're moving to outer point or inner corner
-          const toOuter =
-            Math.floor((this.distanceFromCenter / levelRadius) * 10) % 2 === 0;
-
-          if (toOuter) {
-            // Moving to outer point
-            const targetAngle = currentPointAngle;
-            this.angle = targetAngle;
-          } else {
-            // Moving to inner corner
-            const targetAngle = currentPointAngle + pointAngle / 2;
-            this.angle = targetAngle;
-          }
-
-          const currentRadius = toOuter
-            ? innerRadius +
-              ((outerRadius - innerRadius) *
-                (this.distanceFromCenter % (levelRadius / 5))) /
-                (levelRadius / 5)
-            : outerRadius -
-              ((outerRadius - innerRadius) *
-                (this.distanceFromCenter % (levelRadius / 5))) /
-                (levelRadius / 5);
-
-          x = Math.cos(this.angle) * currentRadius;
-          y = Math.sin(this.angle) * currentRadius;
-        } else {
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
-        }
-        break;
-
-      case "spoke":
-        // Default spoke movement - just move outward along the spoke
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
-        break;
-
-      case "spokeCrossing":
-        // Handle spoke crossing movement
-        if (this.distanceFromCenter > levelRadius * 0.3) {
-          // Calculate crossover effect based on distance from center
-          const crossFactor = Math.min(
-            1,
-            (this.distanceFromCenter / levelRadius) * 2
-          );
-
-          // Gradually shift the angle based on distance from center
-          this.angle +=
-            this.spokeCrossingDirection! *
-            this.spokeCrossingSpeed! *
-            crossFactor *
-            delta *
-            10;
-        }
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
-        break;
-
-      case "linear":
-        // Linear movement with direction vector
-        if (this.direction) {
-          x = this.mesh.position.x + this.direction.x * this.speed * delta * 30;
-          y = this.mesh.position.y + this.direction.y * this.speed * delta * 30;
-          this.distanceFromCenter = Math.sqrt(x * x + y * y);
-        } else {
-          x = Math.cos(this.angle) * this.distanceFromCenter;
-          y = Math.sin(this.angle) * this.distanceFromCenter;
-        }
+      case 10: // Type 10:  linear movement
+        this.distanceFromCenter = Math.sqrt(
+          mesh.position.x * mesh.position.x + mesh.position.y * mesh.position.y
+        );
+        this.movementController = new LinearMovementController(this);
         break;
 
       default:
-        x = Math.cos(this.angle) * this.distanceFromCenter;
-        y = Math.sin(this.angle) * this.distanceFromCenter;
+        this.movementController = new SpokeMovementController(this);
     }
 
-    // Apply position
-    this.mesh.position.set(x, y, 0);
+    // Randomize size slightly
+    this.size = 0.3 + this.type / 20 + Math.random() * 0.1;
+  }
+
+  // Update enemy position based on movement style
+  update(delta: number): void {
+    // Use the movement controller to update position and angle
+    const result = this.movementController.update(delta);
+
+    // Increment distance from center for all movement types
+    this.distanceFromCenter = Math.sqrt(
+      result.x * result.x + result.y * result.y
+    );
+
+    // Apply the position and angle from the controller
+    this.mesh.position.set(result.x, result.y, 0);
 
     // Rotate enemy for visual effect
     this.mesh.rotation.x += delta * 2;
     this.mesh.rotation.y += delta * 2;
 
     // Scale enemy as it moves outward for better visibility
-    const scale = 0.5 + this.distanceFromCenter / (levelRadius * 2);
+    const scale = 0.5 + this.distanceFromCenter / (this.level.getRadius() * 2);
     this.mesh.scale.set(scale, scale, scale);
+
+    // Call the movement controller's optional render method for special effects
+    if (this.movementController.render) {
+      this.movementController.render(this.scene);
+    }
+
+    // For enemy type 8, fire bullets at the player
+    if (this.type === 8) {
+      this.tryFireBullet(delta);
+    }
+
+    // For enemy type 9, fire bombs that explode on boundary contact
+    if (this.type === 9) {
+      this.tryFireBomb(delta);
+    }
   }
 
-  // Check if enemy is outside the level boundary
-  isOffscreen(levelRadius: number): boolean {
-    return this.distanceFromCenter > levelRadius + 2;
+  remove(): void {
+    console.log("Removing enemy");
+    // Clean up any resources from the movement controller
+    if (this.movementController.cleanup) {
+      this.movementController.cleanup(this.scene);
+    }
+    this.scene.remove(this.mesh);
+  }
+
+  // Handle enemy explosion effects
+  explode(): void {
+    console.log("exploding enemy");
+    // Get enemy material and color
+    const enemyMaterial = this.mesh.material as THREE.MeshStandardMaterial;
+
+    // Create explosion particles
+    this.createExplosion(this.mesh.position, enemyMaterial.color);
+
+    // For sphere type enemies, create smaller spheres on explosion
+    if (this.type === 0) {
+      this.createAdditionalEnemies(this.mesh.position);
+    }
+
+    // Play explosion sound
+    // const audio = new Audio("explosion-1.mp3");
+    // audio.play();
+
+    this.remove();
+  }
+
+  // Try to fire a bullet at the player
+  private tryFireBullet(delta: number): void {
+    console.log("tryFireBullet");
+    // Add time to last fire counter
+    this.lastFireTime += delta;
+
+    // Fire bullets every 2-3 seconds
+    const fireInterval = 2 + Math.random();
+
+    if (this.lastFireTime > fireInterval) {
+      this.lastFireTime = 0; // Reset fire timer
+      this.fireBullet();
+    }
+  }
+
+  // Try to fire a bomb that explodes on boundary contact
+  private tryFireBomb(delta: number): void {
+    console.log("tryFireBomb");
+    // Add time to last fire counter
+    this.lastFireTime += delta;
+
+    // Fire bombs every 3-5 seconds (less frequent than regular bullets)
+    const fireInterval = 3 + Math.random() * 2;
+
+    if (this.lastFireTime > fireInterval) {
+      this.lastFireTime = 0; // Reset fire timer
+      this.fireBomb();
+    }
+  }
+
+  // Fire a bullet toward the player on the level edge
+  private fireBullet(): void {
+    // Create a bullet
+    const bulletGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+    const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Red bullet
+    const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+
+    // Set bullet position at enemy location
+    bullet.position.set(this.mesh.position.x, this.mesh.position.y, 0);
+
+    // Get the player's position for targeting
+    let playerDirection: THREE.Vector2;
+    const enemyPos = this.mesh.position;
+
+    // Use actual player position for targeting if available
+    if (this.modeState.playerPosition) {
+      // Calculate vector pointing from enemy to player
+      playerDirection = new THREE.Vector2(
+        this.modeState.playerPosition.x - enemyPos.x,
+        this.modeState.playerPosition.y - enemyPos.y
+      ).normalize();
+    } else {
+      // Fallback if player position isn't available:
+      // Calculate position based on player angle on the level edge
+      const playerAngle = this.modeState.playerAngle || 0;
+      const playerPos = {
+        x: Math.cos(playerAngle) * 10, // Assuming level radius is about 10
+        y: Math.sin(playerAngle) * 10,
+      };
+
+      playerDirection = new THREE.Vector2(
+        playerPos.x - enemyPos.x,
+        playerPos.y - enemyPos.y
+      ).normalize();
+    }
+
+    // Add a small random deviation to make it less accurate
+    const randomAngle = Math.random() * 0.2 - 0.1; // -0.1 to 0.1 radians
+    const aimAngle =
+      Math.atan2(playerDirection.y, playerDirection.x) + randomAngle;
+    const finalDirectionX = Math.cos(aimAngle);
+    const finalDirectionY = Math.sin(aimAngle);
+
+    // Bullet speed is slightly slower than player bullets
+    const bulletSpeed = 0.2;
+
+    // Add to scene and enemy bullets array
+    this.scene.add(bullet);
+
+    // Create new property in modeState if it doesn't exist
+    if (!this.modeState.enemyBullets) {
+      this.modeState.enemyBullets = [];
+    }
+
+    // Add to enemy bullets array
+    this.modeState.enemyBullets.push({
+      mesh: bullet,
+      direction: new THREE.Vector2(finalDirectionX, finalDirectionY),
+      speed: bulletSpeed,
+      fromEnemy: true,
+    });
+
+    // Debug visualization to verify bullet direction
+    // Create a small line showing the direction
+    const directionHelper = new THREE.ArrowHelper(
+      new THREE.Vector3(finalDirectionX, finalDirectionY, 0),
+      new THREE.Vector3(bullet.position.x, bullet.position.y, 0),
+      0.5,
+      0xff0000
+    );
+    this.scene.add(directionHelper);
+
+    // Remove helper after 500ms
+    setTimeout(() => {
+      this.scene.remove(directionHelper);
+    }, 500);
+
+    // Play a subtle sound for enemy fire
+    const audio = new Audio();
+    audio.volume = 0.3; // Lower volume than player shots
+    audio.src = "laser-1.mp3"; // Reuse the laser sound for now
+    audio.play();
+  }
+
+  // Fire a bomb that explodes on contact with the level boundary
+  private fireBomb(): void {
+    // Create a larger, more distinctive bomb
+    const bombGeometry = new THREE.SphereGeometry(0.25, 12, 12);
+
+    // Create pulsating material with orange-red colors
+    const bombMaterial = new THREE.MeshStandardMaterial({
+      color: 0xff6600, // Orange
+      emissive: 0xff3300, // Red-orange glow
+      emissiveIntensity: 0.7,
+      metalness: 0.3,
+      roughness: 0.4,
+    });
+
+    const bomb = new THREE.Mesh(bombGeometry, bombMaterial);
+
+    // Set bomb position at enemy location
+    bomb.position.set(this.mesh.position.x, this.mesh.position.y, 0);
+
+    // Add a pulsating animation to the bomb
+    const pulse = () => {
+      if (bomb && bomb.scale) {
+        // Pulsate between 0.9 and 1.1 size
+        const s = 1 + 0.1 * Math.sin(Date.now() * 0.01);
+        bomb.scale.set(s, s, s);
+
+        // Continue the animation if the bomb still exists
+        if (bomb.parent) {
+          requestAnimationFrame(pulse);
+        }
+      }
+    };
+    pulse(); // Start the pulsating animation
+
+    // Choose direction - bombs can target in various ways
+    let direction: THREE.Vector2;
+
+    // 70% chance to target player, 30% chance for random direction
+    if (Math.random() < 0.7) {
+      // Target player similar to regular bullets
+      const enemyPos = this.mesh.position;
+
+      // Use actual player position for targeting if available
+      if (this.modeState.playerPosition) {
+        // Calculate vector pointing from enemy to player
+        direction = new THREE.Vector2(
+          this.modeState.playerPosition.x - enemyPos.x,
+          this.modeState.playerPosition.y - enemyPos.y
+        ).normalize();
+      } else {
+        // Fallback if player position isn't available
+        const playerAngle = this.modeState.playerAngle || 0;
+        const playerPos = {
+          x: Math.cos(playerAngle) * 10,
+          y: Math.sin(playerAngle) * 10,
+        };
+
+        direction = new THREE.Vector2(
+          playerPos.x - enemyPos.x,
+          playerPos.y - enemyPos.y
+        ).normalize();
+      }
+
+      // Add a larger random deviation than regular bullets
+      const randomAngle = Math.random() * 0.5 - 0.25; // -0.25 to 0.25 radians
+      const aimAngle = Math.atan2(direction.y, direction.x) + randomAngle;
+      direction = new THREE.Vector2(Math.cos(aimAngle), Math.sin(aimAngle));
+    } else {
+      // Random direction
+      const randomAngle = Math.random() * Math.PI * 2;
+      direction = new THREE.Vector2(
+        Math.cos(randomAngle),
+        Math.sin(randomAngle)
+      );
+    }
+
+    // Bomb speed is slower than regular bullets
+    const bombSpeed = 0.15;
+
+    // Add to scene
+    this.scene.add(bomb);
+
+    // Create new property in modeState if it doesn't exist
+    if (!this.modeState.enemyBullets) {
+      this.modeState.enemyBullets = [];
+    }
+
+    // Add to enemy bullets array with the bomb flag
+    this.modeState.enemyBullets.push({
+      mesh: bomb,
+      direction: direction,
+      speed: bombSpeed,
+      fromEnemy: true,
+      isBomb: true, // Mark as a bomb that will explode on boundary contact
+    });
+
+    // Play a distinctive sound for bomb firing
+    const audio = new Audio();
+    audio.volume = 0.4;
+    audio.src = "laser-1.mp3"; // Ideally would be a different sound
+    audio.play();
   }
 
   // Check collision with player
@@ -298,30 +448,12 @@ export class Enemy {
     return distance < playerRadius + this.size;
   }
 
-  // Handle enemy explosion effects
-  explode(): void {
-    // Get enemy material and color
-    const enemyMaterial = this.mesh.material as THREE.MeshStandardMaterial;
-
-    // Create explosion particles
-    this.createExplosion(this.mesh.position, enemyMaterial.color);
-
-    // For sphere type enemies, create smaller spheres on explosion
-    if (this.type === 0) {
-      this.createSmallerSpheres(this.mesh.position);
-    }
-
-    // Play explosion sound
-    const audio = new Audio("explosion-1.mp3");
-    audio.play();
-  }
-
   // Static methods for creating different types of enemies
 
   // Get geometry based on enemy type
-  static getGeometry(piDigit: number): THREE.BufferGeometry {
+  static getGeometry(enemyType: number): THREE.BufferGeometry {
     // Different geometries based on PI digit
-    switch (piDigit) {
+    switch (enemyType) {
       case 1:
         return new THREE.TetrahedronGeometry(0.4);
       case 2:
@@ -346,44 +478,88 @@ export class Enemy {
   }
 
   // Get behavior attributes based on enemy type
-  static getBehavior(piDigit: number): {
+  private getBehavior(): {
     hitPoints: number;
     speedMultiplier: number;
     movementStyle: string;
   } {
-    switch (piDigit) {
-      case 1:
-        return { hitPoints: 1, speedMultiplier: 1.0, movementStyle: "linear" };
-      case 2:
-        return { hitPoints: 2, speedMultiplier: 0.9, movementStyle: "zigzag" };
-      case 3:
+    switch (this.type) {
+      case 0: // Standard follower - always follows spokes
+        return {
+          hitPoints: 1,
+          speedMultiplier: 1.0,
+          movementStyle: "spoke",
+        };
+
+      case 1: // Crosser - always follows spokes but crosses between them
+        return {
+          hitPoints: 2,
+          speedMultiplier: 0.9,
+          movementStyle: "spokeCrossing",
+        };
+
+      case 2: // Speeder - follows patterns but moves faster
+        return {
+          hitPoints: 2,
+          speedMultiplier: 1.5, // Faster!
+          movementStyle: "follow",
+        };
+
+      case 3: // Zigzagger - erratic zig-zag movement
+        return {
+          hitPoints: 3,
+          speedMultiplier: 1.1,
+          movementStyle: "zigzag",
+        };
+
+      case 4: // Orbiter - circular orbital movement
         return {
           hitPoints: 3,
           speedMultiplier: 0.8,
           movementStyle: "circular",
         };
-      case 4:
-        return { hitPoints: 4, speedMultiplier: 0.7, movementStyle: "linear" };
-      case 5:
-        return { hitPoints: 5, speedMultiplier: 0.6, movementStyle: "zigzag" };
-      case 6:
+
+      case 5: // Bouncer - bouncing movement pattern
+        return {
+          hitPoints: 4,
+          speedMultiplier: 1.2,
+          movementStyle: "bounce",
+        };
+
+      case 6: // Chaotic - extremely erratic movement
+        return {
+          hitPoints: 4,
+          speedMultiplier: 0.9,
+          movementStyle: "erratic",
+        };
+
+      case 7: // Hunter - attempts to home in on player
+        return {
+          hitPoints: 5,
+          speedMultiplier: 0.7,
+          movementStyle: "homing",
+        };
+
+      case 8: // Pi-follower - follows pi symbol on pi levels
         return {
           hitPoints: 6,
-          speedMultiplier: 0.5,
-          movementStyle: "circular",
+          speedMultiplier: 0.8,
+          movementStyle: "pi",
         };
-      case 7:
-        return { hitPoints: 7, speedMultiplier: 0.4, movementStyle: "linear" };
-      case 8:
-        return { hitPoints: 8, speedMultiplier: 0.3, movementStyle: "zigzag" };
-      case 9:
+
+      case 9: // Advanced Pi-follower - follows pi symbol but faster and more hit points
         return {
-          hitPoints: 9,
-          speedMultiplier: 0.2,
-          movementStyle: "circular",
+          hitPoints: 8,
+          speedMultiplier: 1.0,
+          movementStyle: "pi",
         };
-      default:
-        return { hitPoints: 1, speedMultiplier: 1.0, movementStyle: "linear" };
+
+      default: // Fallback for any unexpected enemy types
+        return {
+          hitPoints: 1,
+          speedMultiplier: 1.0,
+          movementStyle: "follow",
+        };
     }
   }
 
@@ -464,7 +640,7 @@ export class Enemy {
   }
 
   // Create smaller spheres on explosion
-  private createSmallerSpheres(position: THREE.Vector3): void {
+  private createAdditionalEnemies(position: THREE.Vector3): void {
     // Create three smaller spheres with random directions
     for (let i = 0; i < 3; i++) {
       // Create a smaller sphere enemy
@@ -486,27 +662,13 @@ export class Enemy {
       // Ensure the smaller spheres start at the position of the original enemy
       mesh.position.set(position.x, position.y, position.z);
 
-      // Randomize direction
-      const angle = Math.random() * Math.PI * 2;
-      const randomDirection = new THREE.Vector2(
-        Math.cos(angle),
-        Math.sin(angle)
-      );
-
-      // Create the enemy with a reference to scene, gameState, and modeState
       const enemy = new Enemy(
+        this.level,
         mesh,
-        Math.atan2(randomDirection.y, randomDirection.x),
-        Math.sqrt(position.x * position.x + position.y * position.y),
-        this.modeState.enemySpeed * 1.5, // Slightly faster than original
-        -1, // Special type for smaller spheres
-        0.2,
-        1,
-        "linear",
+        10, // Type 10 for small spheres
         this.scene,
         this.gameState,
-        this.modeState,
-        randomDirection
+        this.modeState
       );
 
       this.scene.add(mesh);

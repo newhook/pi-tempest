@@ -22,7 +22,8 @@ export class Game {
     // Initialize game state with only shared properties
     this.gameState = {
       score: 0,
-      currentLevel: 1,
+      // currentLevel: 1,
+      currentLevel: 5,
       gameStatus: "marquee",
     };
 

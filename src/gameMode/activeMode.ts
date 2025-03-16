@@ -3,10 +3,11 @@ import { GameState, ActiveModeState, Bullet } from "../types";
 import { GameMode } from "./gameMode";
 import { SceneSetup } from "../scene";
 import { EnemyManager } from "../enemies";
+import { Enemy } from "../enemy";
 import { updateScore } from "../ui";
 import { createPlayer, animatePlayer } from "../player";
 import { BloodMoon } from "../bloodMoon";
-import { createLevel } from "../levels";
+import { Level, LevelType } from "../levels";
 
 export class ActiveMode implements GameMode {
   private sceneSetup: SceneSetup;
@@ -15,9 +16,9 @@ export class ActiveMode implements GameMode {
   private enemyManager: EnemyManager;
   private clock: THREE.Clock;
   private lastEnemyTime: number = 0;
-  private level: THREE.Group;
+  private level!: Level;
   private levelRadius: number = 10;
-  private currentLevelType: string = "circle";
+  private currentLevelType: LevelType = LevelType.Circle;
   private bloodMoon: BloodMoon;
   private transitionInProgress: boolean = false;
   private keys = {
@@ -33,7 +34,10 @@ export class ActiveMode implements GameMode {
     enemySpeed: 0.03,
     enemies: [],
     bullets: [],
+    enemyBullets: [],
+    explosions: [], // Track active explosions
     ghostMode: false,
+    spawnEnemies: true, // Enemies spawn by default
   };
 
   constructor(
@@ -45,17 +49,15 @@ export class ActiveMode implements GameMode {
     this.gameState = gameState;
     this.clock = clock;
 
-    this.level = createLevel(this.gameState.currentLevel, this.levelRadius);
-
     this.player = createPlayer(this.modeState.playerSize, this.levelRadius);
 
+    // Create the blood moon but don't add it to the scene yet
     this.bloodMoon = new BloodMoon(this.sceneSetup.scene);
 
     this.enemyManager = new EnemyManager(
       this.sceneSetup.scene,
       this.gameState,
-      this.modeState,
-      this.levelRadius
+      this.modeState
     );
   }
 
@@ -64,7 +66,8 @@ export class ActiveMode implements GameMode {
   }
 
   public enter(): void {
-    this.sceneSetup.scene.add(this.level);
+    this.level = new Level(this.gameState.currentLevel, this.levelRadius);
+    this.sceneSetup.scene.add(this.level.getGroup());
 
     // Ensure player is in the scene
     this.sceneSetup.scene.add(this.player);
@@ -74,27 +77,13 @@ export class ActiveMode implements GameMode {
       this.bloodMoon.fadeOut();
     }, 2000);
 
-    // Make player visible
-    this.player.visible = true;
-
     // Reset enemy spawn timer to start spawning enemies
     this.lastEnemyTime = this.clock.getElapsedTime();
 
-    // Clear any existing enemies
-    this.destroyAllEnemies();
+    // Reset enemy spawning to random (not forced) when starting
+    this.modeState.forcedEnemyType = undefined;
 
     // Set up player movement based on keys
-    this.setupKeyMovement();
-
-    // Reset player position
-    const playerPosition = this.getPositionOnLevelOutline(
-      this.modeState.playerAngle
-    );
-    this.player.position.set(playerPosition.x, playerPosition.y, 0);
-    this.player.lookAt(0, 0, 0);
-  }
-
-  private setupKeyMovement(): void {
     // Update player angle based on keys in animation loop
     this.keyMovementInterval = window.setInterval(() => {
       const moveSpeed = 0.1;
@@ -108,34 +97,48 @@ export class ActiveMode implements GameMode {
         this.normalizePlayerAngle();
       }
     }, 16); // ~60fps
+
+    // Reset player position
+    const playerPosition = this.getPositionOnLevelOutline(
+      this.modeState.playerAngle
+    );
+    this.player.position.set(playerPosition.x, playerPosition.y, 0);
+    this.player.lookAt(0, 0, 0);
   }
 
   public update(delta: number): void {
-    // Skip update if we don't have all required objects
-    if (!this.player || !this.enemyManager || !this.level) return;
-
     const elapsedTime = this.clock.getElapsedTime();
 
-    // Create new enemies periodically
-    if (elapsedTime - this.lastEnemyTime > 1.5 && !this.transitionInProgress) {
-      this.enemyManager.createEnemy();
+    // Create new enemies periodically if enemy spawning is enabled
+    if (
+      this.modeState.spawnEnemies &&
+      elapsedTime - this.lastEnemyTime > 1.5 &&
+      !this.transitionInProgress
+    ) {
+      this.enemyManager.createEnemy(this.level);
       this.lastEnemyTime = elapsedTime;
     }
 
     // Update enemies
-    this.enemyManager.update(delta);
+    this.enemyManager.update(delta, this.level);
 
-    // Update bullets
+    // Update player bullets
     this.updateBullets(delta);
+
+    // Update enemy bullets
+    this.updateEnemyBullets(delta);
 
     // Check for enemy-bullet collisions
     this.checkBulletCollisions();
 
-    // Check for player-enemy collisions (only if ghost mode is not active and not during transition)
+    // Check for player-enemy or if player is hit by enemy bullets or explosions (only if ghost mode is not active, and not
+    // in transition)
     if (
       !this.modeState.ghostMode &&
       !this.transitionInProgress &&
-      this.enemyManager.checkPlayerCollision(this.player)
+      (this.enemyManager.checkPlayerCollision(this.player) ||
+        this.checkPlayerHitByEnemyBullets() ||
+        this.checkPlayerHitByExplosion())
     ) {
       document.dispatchEvent(
         new CustomEvent("gameStatusChanged", {
@@ -154,6 +157,12 @@ export class ActiveMode implements GameMode {
     );
     this.player.position.set(playerPosition.x, playerPosition.y, 0);
 
+    // Store current player position in modeState for enemy targeting
+    this.modeState.playerPosition = {
+      x: playerPosition.x,
+      y: playerPosition.y,
+    };
+
     // Point player toward center
     this.player.lookAt(0, 0, 0);
 
@@ -166,25 +175,26 @@ export class ActiveMode implements GameMode {
 
   public exit(): void {
     // Clean up player if it exists
-    if (this.player) {
-      this.sceneSetup.scene.remove(this.player);
-    }
+    this.sceneSetup.scene.remove(this.player);
 
     // Remove all enemies
     this.destroyAllEnemies();
 
-    // Remove all bullets
+    // Remove all player bullets
     for (const bullet of this.modeState.bullets) {
       this.sceneSetup.scene.remove(bullet.mesh);
     }
     this.modeState.bullets = [];
 
-    // Remove level if it exists
-    if (this.level) {
-      this.sceneSetup.scene.remove(this.level);
+    // Remove all enemy bullets
+    for (const bullet of this.modeState.enemyBullets) {
+      this.sceneSetup.scene.remove(bullet.mesh);
     }
+    this.modeState.enemyBullets = [];
 
-    // Immediately remove the blood moon if it exists
+    // Remove level if it exists
+    this.sceneSetup.scene.remove(this.level.getGroup());
+
     this.bloodMoon.exit();
 
     // Cancel any ongoing key movement interval
@@ -196,11 +206,11 @@ export class ActiveMode implements GameMode {
 
   public shoot(): void {
     // Don't shoot if in transition or player doesn't exist
-    if (this.transitionInProgress || !this.player) return;
+    if (this.transitionInProgress) return;
 
     // Play shooting sound
-    const audio = new Audio("laser-1.mp3");
-    audio.play();
+    // const audio = new Audio("laser-1.mp3");
+    // audio.play();
 
     // Create a bullet
     const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
@@ -244,6 +254,7 @@ export class ActiveMode implements GameMode {
     this.destroyAllEnemies();
 
     // Move the blood moon to the center and expand it to fill the level
+    this.bloodMoon.enter();
     this.bloodMoon.moveToCenter(this.levelRadius);
 
     // Wait for the blood moon to expand
@@ -255,21 +266,23 @@ export class ActiveMode implements GameMode {
     // Fly the player ship to the blood moon (center)
     await this.flyPlayerToBloodMoon();
 
+    // Reset enemy spawning to random when advancing level
+    this.modeState.forcedEnemyType = undefined;
+    this.updateForcedEnemyTypeDisplay();
+
     // Increment level
     this.gameState.currentLevel++;
 
     // Remove old level
-    this.sceneSetup.scene.remove(this.level);
+    this.sceneSetup.scene.remove(this.level.getGroup());
 
     // Create new level
-    this.level = createLevel(
-      this.sceneSetup.scene,
-      this.gameState.currentLevel,
-      this.levelRadius
-    );
+    this.level = new Level(this.gameState.currentLevel, this.levelRadius);
+    this.sceneSetup.scene.add(this.level.getGroup());
 
     // Update the current level type
-    this.currentLevelType = this.getLevelType(this.gameState.currentLevel);
+    this.currentLevelType = ((this.gameState.currentLevel - 1) %
+      5) as LevelType;
 
     // Reset player position to level outline
     const playerPosition = this.getPositionOnLevelOutline(
@@ -343,59 +356,128 @@ export class ActiveMode implements GameMode {
   }
 
   private updateGhostModeDisplay(isActive: boolean): void {
-    // Get existing ghost mode display or create a new one
-    let ghostModeElement = document.getElementById("ghost-mode");
+    // Get existing status display or create a new one
+    let statusElement = document.getElementById("game-status");
 
-    if (!ghostModeElement) {
-      ghostModeElement = document.createElement("div");
-      ghostModeElement.id = "ghost-mode";
-      ghostModeElement.style.position = "absolute";
-      ghostModeElement.style.top = "60px";
-      ghostModeElement.style.right = "20px";
-      ghostModeElement.style.color = "#00FFFF";
-      ghostModeElement.style.fontFamily = "Arial, sans-serif";
-      ghostModeElement.style.fontSize = "20px";
-      document.body.appendChild(ghostModeElement);
+    if (!statusElement) {
+      statusElement = document.createElement("div");
+      statusElement.id = "game-status";
+      statusElement.style.position = "absolute";
+      statusElement.style.top = "60px";
+      statusElement.style.right = "20px";
+      statusElement.style.color = "#00FFFF";
+      statusElement.style.fontFamily = "Arial, sans-serif";
+      statusElement.style.fontSize = "20px";
+      statusElement.style.textAlign = "right";
+      document.body.appendChild(statusElement);
     }
 
+    // Build status text based on various modes
+    let statusText = "";
+
+    // Add ghost mode status
     if (isActive) {
-      ghostModeElement.textContent = "GHOST MODE: ACTIVE";
-      ghostModeElement.style.display = "block";
+      statusText += "GHOST MODE: ACTIVE";
+    }
+
+    // Add enemy spawning status
+    if (!this.modeState.spawnEnemies) {
+      if (statusText) statusText += "<br>";
+      statusText += "ENEMY SPAWNING: DISABLED";
+    }
+
+    // Only display if we have something to show or if forced enemy type is set
+    if (statusText || this.modeState.forcedEnemyType !== undefined) {
+      statusElement.innerHTML = statusText;
+      statusElement.style.display = "block";
     } else {
-      ghostModeElement.style.display = "none";
+      statusElement.style.display = "none";
+    }
+
+    // Update forced enemy type display if applicable
+    this.updateForcedEnemyTypeDisplay();
+  }
+
+  // Toggle enemy spawning on/off
+  public toggleEnemySpawning(): void {
+    if (this.transitionInProgress) return;
+
+    this.modeState.spawnEnemies = !this.modeState.spawnEnemies;
+
+    // Update the status display
+    this.updateGhostModeDisplay(this.modeState.ghostMode);
+  }
+
+  private updateForcedEnemyTypeDisplay(): void {
+    // Get existing status display
+    let statusElement = document.getElementById("game-status");
+
+    if (!statusElement) {
+      // Create it if it doesn't exist
+      statusElement = document.createElement("div");
+      statusElement.id = "game-status";
+      statusElement.style.position = "absolute";
+      statusElement.style.top = "60px";
+      statusElement.style.right = "20px";
+      statusElement.style.color = "#00FFFF";
+      statusElement.style.fontFamily = "Arial, sans-serif";
+      statusElement.style.fontSize = "20px";
+      statusElement.style.textAlign = "right";
+      document.body.appendChild(statusElement);
+    }
+
+    if (this.modeState.forcedEnemyType !== undefined) {
+      // Get current status text and append enemy type info
+      let statusText = statusElement.innerHTML;
+
+      // Add enemy type info
+      if (statusText) statusText += "<br>";
+      statusText += `SPAWNING ENEMY TYPE: ${Enemy.name(
+        this.modeState.forcedEnemyType
+      )}`;
+
+      // Update display
+      statusElement.innerHTML = statusText;
+      statusElement.style.display = "block";
     }
   }
 
-  private getLevelType(levelNumber: number): string {
-    switch ((levelNumber - 1) % 5) {
-      case 0:
-        return "circle";
-      case 1:
-        return "spiral";
-      case 2:
-        return "star";
-      case 3:
-        return "pi";
-      case 4:
-        return "wave";
-      default:
-        return "circle";
+  // Cycle to the next enemy type (0-9) or start from 0
+  private cycleEnemyType(): void {
+    if (this.modeState.forcedEnemyType === undefined) {
+      this.modeState.forcedEnemyType = 0;
+    } else {
+      this.modeState.forcedEnemyType =
+        (this.modeState.forcedEnemyType + 1) % 10;
     }
+
+    // Update the UI to show which enemy type is being forced
+    this.updateForcedEnemyTypeDisplay();
   }
+
+  // Reset to random enemy spawning
+  private resetEnemySpawning(): void {
+    this.modeState.forcedEnemyType = undefined;
+
+    // Update the UI
+    this.updateForcedEnemyTypeDisplay();
+  }
+
+  // The getLevelType method is no longer needed as we use the LevelType enum directly
 
   private getPositionOnLevelOutline(angle: number): { x: number; y: number } {
     let x: number, y: number;
 
     switch (this.currentLevelType) {
-      case "circle":
-      case "spiral":
-      case "pi":
+      case LevelType.Circle:
+      case LevelType.Spiral:
+      case LevelType.PiSymbol:
         // Simple circle
         x = Math.cos(angle) * this.levelRadius;
         y = Math.sin(angle) * this.levelRadius;
         break;
 
-      case "star":
+      case LevelType.Star:
         // Star level - calculate radius based on angle
         const starPoints = 3 + (this.gameState.currentLevel % 5);
         // Calculate how many vertices the star has (points * 2 for both inner and outer points)
@@ -428,7 +510,7 @@ export class ActiveMode implements GameMode {
         y = startY + (endY - startY) * sectionProgress;
         break;
 
-      case "wave":
+      case LevelType.Wave:
         // Wave level - adjust radius based on sine wave
         const amplitude = this.levelRadius * 0.05;
         const waveRadius =
@@ -469,6 +551,119 @@ export class ActiveMode implements GameMode {
     }
   }
 
+  // Update enemy bullets
+  private updateEnemyBullets(delta: number): void {
+    for (let i = this.modeState.enemyBullets.length - 1; i >= 0; i--) {
+      const bullet = this.modeState.enemyBullets[i];
+
+      // Move bullet
+      bullet.mesh.position.x += bullet.direction.x * bullet.speed;
+      bullet.mesh.position.y += bullet.direction.y * bullet.speed;
+
+      // Calculate distance from center
+      const distanceFromCenter = Math.sqrt(
+        bullet.mesh.position.x * bullet.mesh.position.x +
+          bullet.mesh.position.y * bullet.mesh.position.y
+      );
+
+      // Check if bullet goes out of bounds or too close to center
+      if (distanceFromCenter < 1) {
+        // Too close to center, just remove the bullet
+        this.sceneSetup.scene.remove(bullet.mesh);
+        this.modeState.enemyBullets.splice(i, 1);
+      } else if (distanceFromCenter > this.levelRadius) {
+        // Reached the level boundary
+        if (bullet.isBomb) {
+          // Create an explosion at the level boundary for bombs
+          this.createBombExplosion(bullet);
+        }
+        
+        // Remove the bullet
+        this.sceneSetup.scene.remove(bullet.mesh);
+        this.modeState.enemyBullets.splice(i, 1);
+      }
+    }
+  }
+  
+  // Create an explosion when a bomb hits the level boundary
+  private createBombExplosion(bomb: Bullet): void {
+    // Calculate position at boundary
+    const bulletPos = bomb.mesh.position;
+    const direction = new THREE.Vector3(bulletPos.x, bulletPos.y, 0).normalize();
+    
+    // Get the position on the boundary by calculating intersection with level shape
+    // For simplicity, we'll use a circular boundary calculation
+    const boundaryPosition = direction.clone().multiplyScalar(this.levelRadius);
+    
+    // Get the color of the bomb to match the explosion color
+    const bombMaterial = bomb.mesh.material as THREE.MeshStandardMaterial;
+    const bombColor = bombMaterial.color || new THREE.Color(0xff6600); // Default orange if not available
+    
+    // Import EnemyExplosion class from enemies.ts
+    // We'll directly use the EnemyManager to create an explosion
+    this.enemyManager.createExplosionAtPosition(boundaryPosition, bombColor);
+  }
+
+  // Check if player is hit by any enemy bullets
+  private checkPlayerHitByEnemyBullets(): boolean {
+    // Get player position
+    const playerPos = this.player.position;
+    const playerRadius = this.modeState.playerSize * 0.8; // Same collision radius as used for enemies
+
+    // Check each enemy bullet for collision with player
+    for (let i = this.modeState.enemyBullets.length - 1; i >= 0; i--) {
+      const bullet = this.modeState.enemyBullets[i];
+
+      // Calculate distance between bullet and player
+      const dx = playerPos.x - bullet.mesh.position.x;
+      const dy = playerPos.y - bullet.mesh.position.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Check for collision (bullet radius is approximately 0.15)
+      if (distance < playerRadius + 0.15) {
+        // Remove the bullet
+        this.sceneSetup.scene.remove(bullet.mesh);
+        this.modeState.enemyBullets.splice(i, 1);
+
+        // Player is hit!
+        return true;
+      }
+    }
+
+    return false; // No collision detected
+  }
+  
+  // Check if player is hit by any active explosions
+  private checkPlayerHitByExplosion(): boolean {
+    // If no explosions are active, return quickly
+    if (!this.modeState.explosions || this.modeState.explosions.length === 0) {
+      return false;
+    }
+    
+    // Get player position
+    const playerPos = this.player.position;
+    const playerRadius = this.modeState.playerSize * 0.8; // Same collision radius as used for enemies
+    
+    // Check each active explosion for collision with player
+    for (const explosion of this.modeState.explosions) {
+      // Only check if explosion has a non-zero radius (is active)
+      if (explosion.radius <= 0) continue;
+      
+      // Calculate distance between explosion center and player
+      const dx = playerPos.x - explosion.position.x;
+      const dy = playerPos.y - explosion.position.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Check for collision with explosion radius
+      if (distance < playerRadius + explosion.radius) {
+        // Player is hit by explosion!
+        return true;
+      }
+    }
+    
+    return false; // No collision detected
+  }
+
   private checkBulletCollisions(): void {
     // Check each bullet against each enemy
     for (let i = this.modeState.bullets.length - 1; i >= 0; i--) {
@@ -486,11 +681,9 @@ export class ActiveMode implements GameMode {
         if (distance < enemy.size + 0.2) {
           // Collision detected
 
-          // Trigger enemy explosion (which handles effects and smaller spheres)
+          // Trigger enemy explosion.
           enemy.explode();
 
-          // Remove the enemy after explosion triggered
-          this.sceneSetup.scene.remove(enemy.mesh);
           this.modeState.enemies.splice(j, 1);
 
           // Calculate score based on enemy type (pi-based)
@@ -551,8 +744,8 @@ export class ActiveMode implements GameMode {
     // Remove all enemies if they exist
     if (this.enemyManager && this.modeState.enemies.length > 0) {
       for (const enemy of this.modeState.enemies) {
-        enemy.explode(); // Trigger explosion effect
-        this.sceneSetup.scene.remove(enemy.mesh);
+        // Trigger explosion effect
+        enemy.explode();
       }
       this.modeState.enemies = [];
     }
@@ -626,26 +819,33 @@ export class ActiveMode implements GameMode {
   }
 
   public handleKeyDown(event: KeyboardEvent): void {
-    if (!this.gameState.isGameOver) {
-      switch (event.key) {
-        case "ArrowLeft":
-        case "a":
-          this.keys.left = true;
-          break;
-        case "ArrowRight":
-        case "d":
-          this.keys.right = true;
-          break;
-        case " ":
-          this.shoot();
-          break;
-        case "l": // Add "l" key to force level transition
-          this.levelUp();
-          break;
-        case "g": // Add "g" key to toggle ghost mode
-          this.toggleGhostMode();
-          break;
-      }
+    switch (event.key) {
+      case "ArrowLeft":
+      case "a":
+        this.keys.left = true;
+        break;
+      case "ArrowRight":
+      case "d":
+        this.keys.right = true;
+        break;
+      case " ":
+        this.shoot();
+        break;
+      case "l": // Add "l" key to force level transition
+        this.levelUp();
+        break;
+      case "g": // Add "g" key to toggle ghost mode
+        this.toggleGhostMode();
+        break;
+      case "s": // Add "s" key to toggle enemy spawning
+        this.toggleEnemySpawning();
+        break;
+      case "e": // Add "e" key to force spawn specific enemy type
+        this.cycleEnemyType();
+        break;
+      case "E": // Add "E" key to return to random enemy spawning
+        this.resetEnemySpawning();
+        break;
     }
   }
 
@@ -663,30 +863,26 @@ export class ActiveMode implements GameMode {
   }
 
   public handleMouseMove(event: MouseEvent): void {
-    if (!this.gameState.isGameOver) {
-      const centerX = window.innerWidth / 2;
-      const centerY = window.innerHeight / 2;
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
 
-      const mouseX = event.clientX - centerX;
-      // Invert Y coordinate to fix the vertical inversion issue
-      const mouseY = -(event.clientY - centerY);
+    const mouseX = event.clientX - centerX;
+    // Invert Y coordinate to fix the vertical inversion issue
+    const mouseY = -(event.clientY - centerY);
 
-      // Calculate angle to mouse position
-      const mouseAngle = Math.atan2(mouseY, mouseX);
+    // Calculate angle to mouse position
+    const mouseAngle = Math.atan2(mouseY, mouseX);
 
-      // Update player angle
-      this.updatePlayerAngle(mouseAngle);
-    }
+    // Update player angle
+    this.updatePlayerAngle(mouseAngle);
   }
 
   public handleClick(event: MouseEvent): void {
-    if (!this.gameState.isGameOver) {
-      this.shoot();
-    }
+    this.shoot();
   }
 
   public handleTouchMove(event: TouchEvent): void {
-    if (!this.gameState.isGameOver && event.touches.length > 0) {
+    if (event.touches.length > 0) {
       const touch = event.touches[0];
 
       const centerX = window.innerWidth / 2;
@@ -707,8 +903,6 @@ export class ActiveMode implements GameMode {
   }
 
   public handleTouchStart(event: TouchEvent): void {
-    if (!this.gameState.isGameOver) {
-      this.shoot();
-    }
+    this.shoot();
   }
 }

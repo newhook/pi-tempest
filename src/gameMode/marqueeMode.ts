@@ -65,6 +65,7 @@ export class MarqueeMode implements GameMode {
       <p>Use arrow keys or mouse to move</p>
       <p>Click or press space to shoot</p>
       <p>Press G to toggle ghost mode</p>
+      <p>Press S to toggle enemy spawning</p>
       <p>Press SPACE or ENTER to start game</p>
     `;
     marqueeContainer.appendChild(instructionsElement);
