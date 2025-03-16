@@ -91,8 +91,8 @@ export class EnemyManager {
       const enemy = this.modeState.enemies[i];
 
       if (level.collidesWithEnemy(enemy)) {
-        // XXX: explode.
-        this.scene.remove(enemy.mesh);
+        console.log("Enemy reached level boundary");
+        enemy.remove();
         this.modeState.enemies.splice(i, 1);
 
         // Penalty for missing an enemy

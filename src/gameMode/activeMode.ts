@@ -56,8 +56,7 @@ export class ActiveMode implements GameMode {
     this.enemyManager = new EnemyManager(
       this.sceneSetup.scene,
       this.gameState,
-      this.modeState,
-      this.levelRadius
+      this.modeState
     );
   }
 
@@ -110,7 +109,11 @@ export class ActiveMode implements GameMode {
     const elapsedTime = this.clock.getElapsedTime();
 
     // Create new enemies periodically if enemy spawning is enabled
-    if (this.modeState.spawnEnemies && elapsedTime - this.lastEnemyTime > 1.5 && !this.transitionInProgress) {
+    if (
+      this.modeState.spawnEnemies &&
+      elapsedTime - this.lastEnemyTime > 1.5 &&
+      !this.transitionInProgress
+    ) {
       this.enemyManager.createEnemy(this.level);
       this.lastEnemyTime = elapsedTime;
     }
@@ -369,18 +372,18 @@ export class ActiveMode implements GameMode {
 
     // Build status text based on various modes
     let statusText = "";
-    
+
     // Add ghost mode status
     if (isActive) {
       statusText += "GHOST MODE: ACTIVE";
     }
-    
+
     // Add enemy spawning status
     if (!this.modeState.spawnEnemies) {
       if (statusText) statusText += "<br>";
       statusText += "ENEMY SPAWNING: DISABLED";
     }
-    
+
     // Only display if we have something to show or if forced enemy type is set
     if (statusText || this.modeState.forcedEnemyType !== undefined) {
       statusElement.innerHTML = statusText;
@@ -392,13 +395,13 @@ export class ActiveMode implements GameMode {
     // Update forced enemy type display if applicable
     this.updateForcedEnemyTypeDisplay();
   }
-  
+
   // Toggle enemy spawning on/off
   public toggleEnemySpawning(): void {
     if (this.transitionInProgress) return;
-    
+
     this.modeState.spawnEnemies = !this.modeState.spawnEnemies;
-    
+
     // Update the status display
     this.updateGhostModeDisplay(this.modeState.ghostMode);
   }
@@ -424,7 +427,7 @@ export class ActiveMode implements GameMode {
     if (this.modeState.forcedEnemyType !== undefined) {
       // Get current status text and append enemy type info
       let statusText = statusElement.innerHTML;
-      
+
       // Add enemy type info
       if (statusText) statusText += "<br>";
       statusText += `SPAWNING ENEMY TYPE: ${Enemy.name(
@@ -614,11 +617,9 @@ export class ActiveMode implements GameMode {
         if (distance < enemy.size + 0.2) {
           // Collision detected
 
-          // Trigger enemy explosion (which handles effects and smaller spheres)
+          // Trigger enemy explosion.
           enemy.explode();
 
-          // Remove the enemy after explosion triggered
-          this.sceneSetup.scene.remove(enemy.mesh);
           this.modeState.enemies.splice(j, 1);
 
           // Calculate score based on enemy type (pi-based)
@@ -679,8 +680,8 @@ export class ActiveMode implements GameMode {
     // Remove all enemies if they exist
     if (this.enemyManager && this.modeState.enemies.length > 0) {
       for (const enemy of this.modeState.enemies) {
-        enemy.explode(); // Trigger explosion effect
-        this.sceneSetup.scene.remove(enemy.mesh);
+        // Trigger explosion effect
+        enemy.explode();
       }
       this.modeState.enemies = [];
     }

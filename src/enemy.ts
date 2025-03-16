@@ -184,6 +184,36 @@ export class Enemy {
     }
   }
 
+  remove(): void {
+    console.log("Removing enemy");
+    // Clean up any resources from the movement controller
+    if (this.movementController.cleanup) {
+      this.movementController.cleanup(this.scene);
+    }
+    this.scene.remove(this.mesh);
+  }
+
+  // Handle enemy explosion effects
+  explode(): void {
+    console.log("exploding enemy");
+    // Get enemy material and color
+    const enemyMaterial = this.mesh.material as THREE.MeshStandardMaterial;
+
+    // Create explosion particles
+    this.createExplosion(this.mesh.position, enemyMaterial.color);
+
+    // For sphere type enemies, create smaller spheres on explosion
+    if (this.type === 0) {
+      this.createAdditionalEnemies(this.mesh.position);
+    }
+
+    // Play explosion sound
+    // const audio = new Audio("explosion-1.mp3");
+    // audio.play();
+
+    this.remove();
+  }
+
   // Check if enemy is outside the level boundary
   isOffscreen(levelRadius: number): boolean {
     return this.distanceFromCenter > levelRadius + 2;
@@ -310,29 +340,6 @@ export class Enemy {
 
     // Check collision
     return distance < playerRadius + this.size;
-  }
-
-  // Handle enemy explosion effects
-  explode(): void {
-    // Get enemy material and color
-    const enemyMaterial = this.mesh.material as THREE.MeshStandardMaterial;
-
-    // Create explosion particles
-    this.createExplosion(this.mesh.position, enemyMaterial.color);
-
-    // For sphere type enemies, create smaller spheres on explosion
-    if (this.type === 0) {
-      this.createAdditionalEnemies(this.mesh.position);
-    }
-
-    // Clean up any resources from the movement controller
-    if (this.movementController.cleanup) {
-      this.movementController.cleanup(this.scene);
-    }
-
-    // Play explosion sound
-    // const audio = new Audio("explosion-1.mp3");
-    // audio.play();
   }
 
   // Static methods for creating different types of enemies

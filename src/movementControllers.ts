@@ -458,50 +458,80 @@ export class PiMovementController extends BaseMovementController {
   // Which part of the Pi we're currently traversing
   // 0 = horizontal bar, 1 = left leg, 2 = right leg
   private currentPart: number;
-  
+
   // Progress along the current part (0.0 to 1.0)
   private progress: number;
-  
+
   // Movement speed scaling
   private speed: number;
-  
+
   // For type 9 (advanced Pi follower), we can jump between parts
   private canJumpBetweenParts: boolean;
-  
+
   // Direction of movement (1 = forward, -1 = backward)
   private direction: number = 1;
-  
+
   // Pi shape vertices from the level
-  private horizontalBarStart: { x: number, y: number };
-  private horizontalBarEnd: { x: number, y: number };
-  private leftLegStart: { x: number, y: number };
-  private leftLegEnd: { x: number, y: number };
-  private rightLegStart: { x: number, y: number };
-  private rightLegEnd: { x: number, y: number };
-  
+  private horizontalBarStart: { x: number; y: number };
+  private horizontalBarEnd: { x: number; y: number };
+  private leftLegStart: { x: number; y: number };
+  private leftLegEnd: { x: number; y: number };
+  private rightLegStart: { x: number; y: number };
+  private rightLegEnd: { x: number; y: number };
+
   // Zipping across parts (for type 9)
   private isZipping: boolean = false;
   private targetPart: number | null = null;
   private extensionProgress: number = 0;
   private crossingProgress: number = 0;
   private extensionLine?: THREE.Line;
-  
+
   constructor(enemy: Enemy) {
     super(enemy);
-    
-    // Extract Pi shape data from the level
-    this.extractPiVertices(enemy.level);
-    
+
+    // Get Pi symbol vertices from the level
+    const piVertices = enemy.level.getPiSymbolVertices();
+
+    // Top horizontal line
+    this.horizontalBarStart = {
+      x: piVertices[0],
+      y: piVertices[1],
+    };
+    this.horizontalBarEnd = {
+      x: piVertices[3],
+      y: piVertices[4],
+    };
+
+    // Left vertical line
+    this.leftLegStart = {
+      x: piVertices[6],
+      y: piVertices[7],
+    };
+    this.leftLegEnd = {
+      x: piVertices[9],
+      y: piVertices[10],
+    };
+
+    // Right vertical line
+    this.rightLegStart = {
+      x: piVertices[12],
+      y: piVertices[13],
+    };
+    this.rightLegEnd = {
+      x: piVertices[15],
+      y: piVertices[16],
+    };
+
     // Initialize movement
     this.currentPart = Math.floor(Math.random() * 3); // Start on a random part
     this.progress = Math.random(); // Start at a random position on the part
-    
+
     // Randomize initial direction
     this.direction = Math.random() > 0.5 ? 1 : -1;
-    
+
     // For type 9, enable jumping between Pi parts
     this.canJumpBetweenParts = enemy.type === 9;
-    
+
     // Type 9 moves faster than type 8
     this.speed = enemy.type === 9 ? 0.3 : 0.2;
 
@@ -510,57 +540,21 @@ export class PiMovementController extends BaseMovementController {
     enemy.mesh.position.set(initialPosition.x, initialPosition.y, 0);
   }
 
-  // Extract Pi vertices from the level definition
-  private extractPiVertices(level: any): void {
-    // Get Pi symbol vertices from the level
-    const piVertices = level.getPiSymbolVertices();
-    
-    // Top horizontal line
-    this.horizontalBarStart = { 
-      x: piVertices[0], 
-      y: piVertices[1] 
-    };
-    this.horizontalBarEnd = { 
-      x: piVertices[3], 
-      y: piVertices[4] 
-    };
-    
-    // Left vertical line
-    this.leftLegStart = { 
-      x: piVertices[6], 
-      y: piVertices[7] 
-    };
-    this.leftLegEnd = { 
-      x: piVertices[9], 
-      y: piVertices[10] 
-    };
-    
-    // Right vertical line
-    this.rightLegStart = { 
-      x: piVertices[12], 
-      y: piVertices[13] 
-    };
-    this.rightLegEnd = { 
-      x: piVertices[15], 
-      y: piVertices[16] 
-    };
-  }
-
   update(delta: number): { x: number; y: number } {
     // For type 9, check if we should start zipping to a different part
     if (this.canJumpBetweenParts && !this.isZipping && Math.random() < 0.01) {
       this.startZipping();
       return this.calculatePosition(); // Return current position while starting to zip
     }
-    
+
     // Handle zipping movement for type 9
     if (this.isZipping && this.targetPart !== null) {
       return this.updateZipping(delta);
     }
-    
+
     // Update progress along the current part based on direction
     this.progress += delta * this.speed * this.direction;
-    
+
     // Check boundaries and reverse direction if needed
     if (this.progress >= 1.0) {
       if (this.canJumpBetweenParts && Math.random() > 0.7) {
@@ -587,67 +581,71 @@ export class PiMovementController extends BaseMovementController {
         // Hit start of segment, reverse direction
         this.progress = 0.0;
         this.direction = 1;
-        
+
         // Type 8: Occasionally move to next segment when at a junction
         if (!this.canJumpBetweenParts && Math.random() > 0.5) {
           // Only switch segments if we're at a junction (top of a leg or end of horizontal)
-          if ((this.currentPart === 1 && this.progress === 0.0) ||  // Top of left leg
-              (this.currentPart === 2 && this.progress === 0.0) ||  // Top of right leg
-              (this.currentPart === 0 && (this.progress === 0.0 || this.progress === 1.0))) { // Ends of horizontal
+          if (
+            (this.currentPart === 1 && this.progress === 0.0) || // Top of left leg
+            (this.currentPart === 2 && this.progress === 0.0) || // Top of right leg
+            (this.currentPart === 0 &&
+              (this.progress === 0.0 || this.progress === 1.0))
+          ) {
+            // Ends of horizontal
             this.currentPart = (this.currentPart + 1) % 3;
           }
         }
       }
     }
-    
+
     // Calculate position on the Pi symbol
     const position = this.calculatePosition();
-    
+
     // Update angle for proper orientation
     this.angle = Math.atan2(position.y, position.x);
-    
+
     return position;
   }
-  
+
   // Start the zipping process to another part of the Pi symbol
   private startZipping(): void {
     // Only for type 9
     if (!this.canJumpBetweenParts) return;
-    
+
     this.isZipping = true;
     this.extensionProgress = 0;
     this.crossingProgress = 0;
-    
+
     // Select a target part different from current part
     do {
       this.targetPart = Math.floor(Math.random() * 3);
     } while (this.targetPart === this.currentPart);
-    
+
     // Randomize target progress position on the new segment
     this.progress = Math.random();
   }
-  
+
   // Update the zipping movement (extending a line and crossing to a new part)
   private updateZipping(delta: number): { x: number; y: number } {
     if (this.targetPart === null) {
       this.isZipping = false;
       return this.calculatePosition();
     }
-    
+
     // Current position
     const currentPosition = this.calculatePosition();
-    
+
     // Phase 1: Extending a line toward the target part
     if (this.extensionProgress < 1.0) {
       this.extensionProgress += delta * 3; // Speed of extension
-      
+
       // Keep the current position during extension
       return currentPosition;
     }
-    
+
     // Phase 2: Zipping along the extended line
     this.crossingProgress += delta * 8; // Speed of zip movement
-    
+
     // If crossing is complete, transition to the target part
     if (this.crossingProgress >= 1.0) {
       this.currentPart = this.targetPart;
@@ -655,40 +653,44 @@ export class PiMovementController extends BaseMovementController {
       this.isZipping = false;
       this.extensionProgress = 0;
       this.crossingProgress = 0;
-      
+
       // Ensure extension line is properly removed from scene when zipping completes
       if (this.extensionLine && this.enemy && this.enemy.scene) {
         this.removeExtensionLine(this.enemy.scene);
       }
-      
+
       // Return the new position on the target part
       return this.calculatePosition();
     }
-    
+
     // During crossing, interpolate between current and target positions
     // Calculate target position
     const originalPart = this.currentPart;
     this.currentPart = this.targetPart;
     const targetPosition = this.calculatePosition();
     this.currentPart = originalPart;
-    
+
     // Apply easing for smoother transition
     const easedProgress = this.easeInOutQuad(this.crossingProgress);
-    
-    const x = currentPosition.x + (targetPosition.x - currentPosition.x) * easedProgress;
-    const y = currentPosition.y + (targetPosition.y - currentPosition.y) * easedProgress;
-    
+
+    const x =
+      currentPosition.x +
+      (targetPosition.x - currentPosition.x) * easedProgress;
+    const y =
+      currentPosition.y +
+      (targetPosition.y - currentPosition.y) * easedProgress;
+
     // Update angle for proper orientation during crossing
     this.angle = Math.atan2(y, x);
-    
+
     return { x, y };
   }
-  
+
   // Quadratic easing function for smoother transitions
   private easeInOutQuad(t: number): number {
     return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
   }
-  
+
   // Render the extension line during zipping
   render(scene: THREE.Scene): void {
     try {
@@ -705,12 +707,12 @@ export class PiMovementController extends BaseMovementController {
       this.removeExtensionLine(scene);
     }
   }
-  
+
   cleanup(scene: THREE.Scene): void {
     // Ensure the extension line is removed when enemy is destroyed
     this.removeExtensionLine(scene);
   }
-  
+
   // Helper method to safely remove extension line
   private removeExtensionLine(scene: THREE.Scene): void {
     if (this.extensionLine) {
@@ -719,24 +721,24 @@ export class PiMovementController extends BaseMovementController {
       } catch (e) {
         console.error("Error removing extension line:", e);
       }
-      
+
       // Dispose of geometry and material to prevent memory leaks
       if (this.extensionLine.geometry) {
         this.extensionLine.geometry.dispose();
       }
-      
+
       if (this.extensionLine.material) {
         // Check if it's an array of materials or a single material
         if (Array.isArray(this.extensionLine.material)) {
-          this.extensionLine.material.forEach(material => material.dispose());
+          this.extensionLine.material.forEach((material) => material.dispose());
         } else {
           this.extensionLine.material.dispose();
         }
       }
-      
+
       this.extensionLine = undefined;
     }
-    
+
     // Reset zipping state to ensure we don't try to render lines in an invalid state
     if (!this.isZipping) {
       this.extensionProgress = 0;
@@ -744,94 +746,110 @@ export class PiMovementController extends BaseMovementController {
       this.targetPart = null;
     }
   }
-  
+
   private updateExtensionLine(scene: THREE.Scene): void {
     if (this.targetPart === null) return;
-    
+
     // Current position
     const currentPosition = this.calculatePosition();
-    
+
     // Calculate target position
     const originalPart = this.currentPart;
     this.currentPart = this.targetPart;
     const targetPosition = this.calculatePosition();
     this.currentPart = originalPart;
-    
+
     // Calculate target position with extension progress
-    const targetX = currentPosition.x + (targetPosition.x - currentPosition.x) * this.extensionProgress;
-    const targetY = currentPosition.y + (targetPosition.y - currentPosition.y) * this.extensionProgress;
-    
+    const targetX =
+      currentPosition.x +
+      (targetPosition.x - currentPosition.x) * this.extensionProgress;
+    const targetY =
+      currentPosition.y +
+      (targetPosition.y - currentPosition.y) * this.extensionProgress;
+
     // Create vector positions for line endpoints
     const startPos = new THREE.Vector3(currentPosition.x, currentPosition.y, 0);
     const endPos = new THREE.Vector3(targetX, targetY, 0);
-    
+
     // Create or update line
     if (!this.extensionLine) {
       // Create line geometry
       const lineGeometry = new THREE.BufferGeometry();
       const linePositions = new Float32Array([
-        startPos.x, startPos.y, startPos.z,
-        endPos.x, endPos.y, endPos.z
+        startPos.x,
+        startPos.y,
+        startPos.z,
+        endPos.x,
+        endPos.y,
+        endPos.z,
       ]);
-      
+
       lineGeometry.setAttribute(
         "position",
         new THREE.BufferAttribute(linePositions, 3)
       );
-      
+
       // Create line material - color matches enemy
-      const enemyMaterial = this.enemy.mesh.material as THREE.MeshStandardMaterial;
+      const enemyMaterial = this.enemy.mesh
+        .material as THREE.MeshStandardMaterial;
       const lineMaterial = new THREE.LineBasicMaterial({
         color: enemyMaterial.color,
         linewidth: 2,
         opacity: 0.7,
-        transparent: true
+        transparent: true,
       });
-      
+
       // Create line and add to scene
       this.extensionLine = new THREE.Line(lineGeometry, lineMaterial);
       scene.add(this.extensionLine);
     } else {
       // Update existing line
-      const positions = this.extensionLine.geometry.attributes.position.array as Float32Array;
-      
+      const positions = this.extensionLine.geometry.attributes.position
+        .array as Float32Array;
+
       // Update start position
       positions[0] = startPos.x;
       positions[1] = startPos.y;
       positions[2] = startPos.z;
-      
+
       // Update end position
       positions[3] = endPos.x;
       positions[4] = endPos.y;
       positions[5] = endPos.z;
-      
+
       this.extensionLine.geometry.attributes.position.needsUpdate = true;
     }
   }
-  
-  private calculatePosition(): { x: number, y: number } {
+
+  private calculatePosition(): { x: number; y: number } {
     let x, y;
-    
+
     switch (this.currentPart) {
       case 0: // Horizontal bar
         // Interpolate along the bar based on progress
-        x = this.horizontalBarStart.x + (this.horizontalBarEnd.x - this.horizontalBarStart.x) * this.progress;
+        x =
+          this.horizontalBarStart.x +
+          (this.horizontalBarEnd.x - this.horizontalBarStart.x) * this.progress;
         y = this.horizontalBarStart.y; // Y remains constant for horizontal bar
         break;
-        
+
       case 1: // Left leg
         x = this.leftLegStart.x; // X remains constant for vertical leg
         // Interpolate along the left leg based on progress
-        y = this.leftLegStart.y + (this.leftLegEnd.y - this.leftLegStart.y) * this.progress;
+        y =
+          this.leftLegStart.y +
+          (this.leftLegEnd.y - this.leftLegStart.y) * this.progress;
         break;
-        
+
       case 2: // Right leg
         x = this.rightLegStart.x; // X remains constant for vertical leg
         // Interpolate along the right leg based on progress
-        y = this.rightLegStart.y + (this.rightLegEnd.y - this.rightLegStart.y) * this.progress;
+        y =
+          this.rightLegStart.y +
+          (this.rightLegEnd.y - this.rightLegStart.y) * this.progress;
         break;
     }
-    
+
     return { x, y };
   }
 }
@@ -1067,20 +1085,21 @@ export class ErraticMovementController extends BaseMovementController {
   private timeBetweenSpawns: number = 5.0; // Spawn every 5 seconds
   private spokePosition: SpokePosition;
   private elapsedTime: number = 0;
-  
+
   constructor(enemy: Enemy) {
     super(enemy);
-    
+
     // Get the actual spoke position data for more controlled movement
     const spokePositions = enemy.level.getSpokePositions();
-    
+
     // Randomly select a spoke to generally follow (though will deviate erratically)
     const spokeCount = enemy.level.getSpokeCount();
     const randomSpokeIndex = Math.floor(Math.random() * spokeCount);
-    
+
     // Set the spoke position
-    this.spokePosition = spokePositions[randomSpokeIndex % spokePositions.length];
-    
+    this.spokePosition =
+      spokePositions[randomSpokeIndex % spokePositions.length];
+
     // Start with random pause timing so not all chaotic enemies spawn at once
     this.lastSpawnTime = -Math.random() * 3.0;
   }
@@ -1088,48 +1107,59 @@ export class ErraticMovementController extends BaseMovementController {
   update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
     this.elapsedTime += delta;
-    
+
     // Check if it's time to pause and spawn
-    if (this.isMoving && this.elapsedTime - this.lastSpawnTime > this.timeBetweenSpawns) {
+    if (
+      this.isMoving &&
+      this.elapsedTime - this.lastSpawnTime > this.timeBetweenSpawns
+    ) {
       // Stop moving and start pause
       this.isMoving = false;
       this.pauseTime = this.elapsedTime;
-      
+
       // Spawn smaller enemies
       this.spawnSmallEnemies();
-      
+
       // Make the enemy "flash" by modifying its material
       this.flashEnemy();
     }
-    
+
     // Check if pause time is over
-    if (!this.isMoving && this.elapsedTime - this.pauseTime > this.pauseDuration) {
+    if (
+      !this.isMoving &&
+      this.elapsedTime - this.pauseTime > this.pauseDuration
+    ) {
       this.isMoving = true;
       this.lastSpawnTime = this.elapsedTime;
     }
-    
+
     let x, y;
-    
+
     if (this.isMoving) {
       // Erratic movement when active - combine random movement with slight spoke following
       const randomFactor = 0.1; // How much randomness to add
       const spokeFactor = 0.9; // How much to follow the general spoke direction
-      
+
       // Add some erratic angle changes
-      this.angle += 
+      this.angle +=
         (Math.sin(this.enemy.distanceFromCenter * 0.5) +
-         Math.cos(this.enemy.distanceFromCenter * 0.3)) * 0.1 +
+          Math.cos(this.enemy.distanceFromCenter * 0.3)) *
+          0.1 +
         (Math.random() - 0.5) * 0.08;
-      
+
       // Calculate position based on updated angle
       const randomX = Math.cos(this.angle) * this.enemy.distanceFromCenter;
       const randomY = Math.sin(this.angle) * this.enemy.distanceFromCenter;
-      
+
       // Calculate position on spoke for partial guidance
       const t = this.enemy.distanceFromCenter / levelRadius;
-      const spokeX = this.spokePosition.innerX + (this.spokePosition.outerX - this.spokePosition.innerX) * t;
-      const spokeY = this.spokePosition.innerY + (this.spokePosition.outerY - this.spokePosition.innerY) * t;
-      
+      const spokeX =
+        this.spokePosition.innerX +
+        (this.spokePosition.outerX - this.spokePosition.innerX) * t;
+      const spokeY =
+        this.spokePosition.innerY +
+        (this.spokePosition.outerY - this.spokePosition.innerY) * t;
+
       // Blend random movement with spoke-following for semi-guided chaos
       x = randomX * randomFactor + spokeX * spokeFactor;
       y = randomY * randomFactor + spokeY * spokeFactor;
@@ -1138,22 +1168,22 @@ export class ErraticMovementController extends BaseMovementController {
       x = this.enemy.mesh.position.x;
       y = this.enemy.mesh.position.y;
     }
-    
+
     return { x, y };
   }
-  
+
   // Spawn 4 small type 10 enemies
   private spawnSmallEnemies(): void {
     // Create a sphere geometry for the small enemies
     const geometry = new THREE.SphereGeometry(0.2, 8, 8);
-    
+
     // Create a glowing material with pulsating effect
     const hue = 0.3 + Math.random() * 0.1; // green to yellowish-green
     const color = new THREE.Color().setHSL(hue, 1, 0.5);
-    
+
     // Get enemy's current position
     const position = this.enemy.mesh.position.clone();
-    
+
     // Spawn 4 enemies in cardinal directions
     for (let i = 0; i < 4; i++) {
       const material = new THREE.MeshStandardMaterial({
@@ -1162,9 +1192,9 @@ export class ErraticMovementController extends BaseMovementController {
         emissiveIntensity: 0.7,
         flatShading: true,
       });
-      
+
       const mesh = new THREE.Mesh(geometry, material);
-      
+
       // Position slightly offset from parent enemy
       const angle = (i / 4) * Math.PI * 2;
       const offsetDistance = 0.5; // Distance from parent enemy
@@ -1173,7 +1203,7 @@ export class ErraticMovementController extends BaseMovementController {
         position.y + Math.sin(angle) * offsetDistance,
         position.z
       );
-      
+
       // Create the enemy object with proper parameters order matching the Enemy constructor
       const smallEnemy = new Enemy(
         this.enemy.level,
@@ -1183,25 +1213,26 @@ export class ErraticMovementController extends BaseMovementController {
         this.enemy.gameState,
         this.enemy.modeState
       );
-      
+
       // Add to scene and enemy list
       this.enemy.scene.add(mesh);
       this.enemy.modeState.enemies.push(smallEnemy);
     }
   }
-  
+
   // Make the enemy flash when spawning
   private flashEnemy(): void {
-    const enemyMaterial = this.enemy.mesh.material as THREE.MeshStandardMaterial;
+    const enemyMaterial = this.enemy.mesh
+      .material as THREE.MeshStandardMaterial;
     const originalColor = enemyMaterial.color.clone();
     const originalEmissive = enemyMaterial.emissive.clone();
     const originalIntensity = enemyMaterial.emissiveIntensity;
-    
+
     // Flash white
     enemyMaterial.color.set(0xffffff);
     enemyMaterial.emissive.set(0xffffff);
     enemyMaterial.emissiveIntensity = 1.0;
-    
+
     // Reset after flash duration
     setTimeout(() => {
       if (this.enemy && this.enemy.mesh) {
@@ -1220,49 +1251,56 @@ export class BounceMovementController extends BaseMovementController {
 
   constructor(enemy: Enemy) {
     super(enemy);
-    
+
     // Get the actual spoke position data
     const spokePositions = enemy.level.getSpokePositions();
-    
+
     // Randomly select a spoke
     const spokeCount = enemy.level.getSpokeCount();
     const randomSpokeIndex = Math.floor(Math.random() * spokeCount);
-    
+
     // Set the spoke position
-    this.spokePosition = spokePositions[randomSpokeIndex % spokePositions.length];
-    
+    this.spokePosition =
+      spokePositions[randomSpokeIndex % spokePositions.length];
+
     // Update the angle for proper orientation
     this.angle = this.spokePosition.angle;
-    
+
     // Random bounce intensity
     this.bounceScale = 0.05 + Math.random() * 0.15; // Controls how strong the bounce is
   }
 
   update(delta: number): { x: number; y: number } {
     const levelRadius = this.enemy.level.getRadius();
-    
+
     // Calculate normalized distance and maintain original distance for calculations
     const originalDistance = this.enemy.distanceFromCenter;
     let adjustedDistance = originalDistance;
-    
+
     // Calculate bounce parameters - a bounce every 20% of the level radius
     const bouncePhase = Math.floor(originalDistance / (levelRadius * 0.2));
-    const bounceProgress = (originalDistance % (levelRadius * 0.2)) / (levelRadius * 0.2);
-    
+    const bounceProgress =
+      (originalDistance % (levelRadius * 0.2)) / (levelRadius * 0.2);
+
     // Only apply bounce on odd phases (every other segment)
     if (bouncePhase % 2 === 1) {
       // Apply sinusoidal bounce effect to get the characteristic bounce motion
-      const bounceAmount = Math.sin(bounceProgress * Math.PI) * (levelRadius * this.bounceScale);
+      const bounceAmount =
+        Math.sin(bounceProgress * Math.PI) * (levelRadius * this.bounceScale);
       adjustedDistance -= bounceAmount;
     }
-    
+
     // Calculate position along the spoke using interpolation of spoke coordinates
     const t = adjustedDistance / levelRadius;
-    
+
     // Interpolate between inner and outer positions of the spoke
-    const x = this.spokePosition.innerX + (this.spokePosition.outerX - this.spokePosition.innerX) * t;
-    const y = this.spokePosition.innerY + (this.spokePosition.outerY - this.spokePosition.innerY) * t;
-    
+    const x =
+      this.spokePosition.innerX +
+      (this.spokePosition.outerX - this.spokePosition.innerX) * t;
+    const y =
+      this.spokePosition.innerY +
+      (this.spokePosition.outerY - this.spokePosition.innerY) * t;
+
     return { x, y };
   }
 }
