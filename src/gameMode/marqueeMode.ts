@@ -82,14 +82,6 @@ export class MarqueeMode implements GameMode {
     instructionsElement.style.maxWidth = "600px";
     instructionsElement.style.margin = "20px 0";
     instructionsElement.style.textShadow = "0 0 5px #FF0000";
-    instructionsElement.innerHTML = `
-      <p>Use arrow keys or mouse to move</p>
-      <p>Click or press space to shoot</p>
-      <p>Press G to toggle ghost mode</p>
-      <p>Press S to toggle enemy spawning</p>
-      <p>Press M to toggle sound on/off</p>
-      <p>Press SPACE or ENTER to start game</p>
-    `;
     marqueeContainer.appendChild(instructionsElement);
 
     this.marqueeContainer = marqueeContainer;

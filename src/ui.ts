@@ -54,19 +54,6 @@ export function setupUI(): void {
   levelElement.innerText = "Level: 1";
   document.body.appendChild(levelElement);
 
-  // Create π symbol display
-  const piSymbol = document.createElement("div");
-  piSymbol.id = "pi-symbol";
-  piSymbol.style.position = "absolute";
-  piSymbol.style.top = "60px";
-  piSymbol.style.right = "20px";
-  piSymbol.style.fontSize = "32px";
-  piSymbol.style.fontFamily = "serif";
-  piSymbol.style.color = "#66ccff";
-  piSymbol.style.textShadow = "0 0 8px #66ccff";
-  piSymbol.innerText = "π";
-  document.body.appendChild(piSymbol);
-
   // Initialize the game in marquee mode
   document.dispatchEvent(
     new CustomEvent("gameStatusChanged", { detail: { status: "marquee" } })

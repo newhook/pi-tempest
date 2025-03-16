@@ -10,7 +10,7 @@ import { BloodMoon } from "../bloodMoon";
 import { Level, LevelType } from "../levels";
 import { SoundManager } from "../synth";
 
-const maxLevelTime = 10;
+const maxLevelTime = 60;
 
 export class ActiveMode implements GameMode {
   private sceneSetup: SceneSetup;
