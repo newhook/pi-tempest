@@ -455,138 +455,383 @@ export class HomingMovementController extends BaseMovementController {
 
 // Pi movement - follows Pi symbol
 export class PiMovementController extends BaseMovementController {
-  private pathParams?: {
-    startAngle: number;
-    spiralTightness: number;
-    waveAmplitude: number;
-    waveFrequency: number;
-    pathOffset: number;
-  };
+  // Which part of the Pi we're currently traversing
+  // 0 = horizontal bar, 1 = left leg, 2 = right leg
+  private currentPart: number;
+  
+  // Progress along the current part (0.0 to 1.0)
+  private progress: number;
+  
+  // Movement speed scaling
+  private speed: number;
+  
+  // For type 9 (advanced Pi follower), we can jump between parts
+  private canJumpBetweenParts: boolean;
+  
+  // Direction of movement (1 = forward, -1 = backward)
+  private direction: number = 1;
+  
+  // Pi shape vertices from the level
+  private horizontalBarStart: { x: number, y: number };
+  private horizontalBarEnd: { x: number, y: number };
+  private leftLegStart: { x: number, y: number };
+  private leftLegEnd: { x: number, y: number };
+  private rightLegStart: { x: number, y: number };
+  private rightLegEnd: { x: number, y: number };
+  
+  // Zipping across parts (for type 9)
+  private isZipping: boolean = false;
+  private targetPart: number | null = null;
+  private extensionProgress: number = 0;
+  private crossingProgress: number = 0;
+  private extensionLine?: THREE.Line;
+  
   constructor(enemy: Enemy) {
     super(enemy);
-    this.pathParams = {
-      startAngle: this.angle,
-      spiralTightness: 0.1,
-      waveAmplitude: 0.7,
-      waveFrequency: 3.0,
-      pathOffset: Math.random() * Math.PI * 2,
+    
+    // Extract Pi shape data from the level
+    this.extractPiVertices(enemy.level);
+    
+    // Initialize movement
+    this.currentPart = Math.floor(Math.random() * 3); // Start on a random part
+    this.progress = Math.random(); // Start at a random position on the part
+    
+    // Randomize initial direction
+    this.direction = Math.random() > 0.5 ? 1 : -1;
+    
+    // For type 9, enable jumping between Pi parts
+    this.canJumpBetweenParts = enemy.type === 9;
+    
+    // Type 9 moves faster than type 8
+    this.speed = enemy.type === 9 ? 0.3 : 0.2;
+
+    // Move enemy to initial position on the Pi
+    const initialPosition = this.calculatePosition();
+    enemy.mesh.position.set(initialPosition.x, initialPosition.y, 0);
+  }
+
+  // Extract Pi vertices from the level definition
+  private extractPiVertices(level: any): void {
+    // Get Pi symbol vertices from the level
+    const piVertices = level.getPiSymbolVertices();
+    
+    // Top horizontal line
+    this.horizontalBarStart = { 
+      x: piVertices[0], 
+      y: piVertices[1] 
+    };
+    this.horizontalBarEnd = { 
+      x: piVertices[3], 
+      y: piVertices[4] 
+    };
+    
+    // Left vertical line
+    this.leftLegStart = { 
+      x: piVertices[6], 
+      y: piVertices[7] 
+    };
+    this.leftLegEnd = { 
+      x: piVertices[9], 
+      y: piVertices[10] 
+    };
+    
+    // Right vertical line
+    this.rightLegStart = { 
+      x: piVertices[12], 
+      y: piVertices[13] 
+    };
+    this.rightLegEnd = { 
+      x: piVertices[15], 
+      y: piVertices[16] 
     };
   }
 
   update(delta: number): { x: number; y: number } {
-    const levelRadius = this.enemy.level.getRadius();
-    let x, y;
-
-    // Always ensure enemies of type 8 and 9 have pathParams for Pi movement
-    if ((this.enemy.type === 8 || this.enemy.type === 9) && !this.pathParams) {
-      this.pathParams = {
-        startAngle: this.angle,
-        spiralTightness: 0.1,
-        waveAmplitude: 0.7,
-        waveFrequency: 3.0,
-        pathOffset: Math.random() * Math.PI * 2,
-      };
+    // For type 9, check if we should start zipping to a different part
+    if (this.canJumpBetweenParts && !this.isZipping && Math.random() < 0.01) {
+      this.startZipping();
+      return this.calculatePosition(); // Return current position while starting to zip
     }
-
-    if (this.pathParams) {
-      // Calculate position along pi symbol
-      // The pi symbol consists of:
-      // 1. A horizontal bar at the top
-      // 2. Two vertical lines coming down from the bar
-
-      // Normalize distance to create pi symbol within level radius
-      const normalizedDist = this.enemy.distanceFromCenter / levelRadius;
-
-      // Random starting position on Pi symbol for enemy types 8 and 9
-      if (
-        this.enemy.distanceFromCenter === 0 &&
-        (this.enemy.type === 8 || this.enemy.type === 9)
-      ) {
-        // Randomly decide which part of the Pi symbol to start on
-        const piPart = Math.floor(Math.random() * 3); // 0: horizontal, 1: left leg, 2: right leg
-
-        if (piPart === 0) {
-          // Start on horizontal bar - random position along the bar
-          const t = Math.random(); // 0 to 1 position along the bar
-          x = -levelRadius * 0.5 + t * levelRadius;
-          y = -levelRadius * 0.15;
-          this.enemy.distanceFromCenter = 0.4 * levelRadius; // Skip initial approach
-        } else if (piPart === 1) {
-          // Start on left leg - random position along the leg
-          x = -levelRadius * 0.4;
-          y = -levelRadius * 0.15 - Math.random() * levelRadius * 0.85;
-          this.enemy.distanceFromCenter = 0.6 * levelRadius; // Skip to vertical part
-        } else {
-          // Start on right leg - random position along the leg
-          x = levelRadius * 0.4;
-          y = -levelRadius * 0.15 - Math.random() * levelRadius * 0.85;
-          this.enemy.distanceFromCenter = 0.6 * levelRadius; // Skip to vertical part
-        }
-
-        // Update angle for proper orientation
-        this.angle = Math.atan2(y, x);
-        return { x, y };
-      }
-
-      if (normalizedDist < 0.3) {
-        // Initial approach from center
-        x =
-          this.pathParams.startAngle < Math.PI
-            ? -normalizedDist * levelRadius * 0.5
-            : normalizedDist * levelRadius * 0.5;
-        y = -normalizedDist * levelRadius * 0.5;
-      } else if (normalizedDist < 0.5) {
-        // Moving to horizontal bar position
-        const t = (normalizedDist - 0.3) / 0.2;
-        x =
-          this.pathParams.startAngle < Math.PI
-            ? -levelRadius * 0.5 + t * levelRadius
-            : levelRadius * 0.5 - t * levelRadius;
-        y = -levelRadius * 0.15;
+    
+    // Handle zipping movement for type 9
+    if (this.isZipping && this.targetPart !== null) {
+      return this.updateZipping(delta);
+    }
+    
+    // Update progress along the current part based on direction
+    this.progress += delta * this.speed * this.direction;
+    
+    // Check boundaries and reverse direction if needed
+    if (this.progress >= 1.0) {
+      if (this.canJumpBetweenParts && Math.random() > 0.7) {
+        // Type 9: Sometimes jump to a random part instead of reversing
+        this.progress = 0.0;
+        const oldPart = this.currentPart;
+        do {
+          this.currentPart = Math.floor(Math.random() * 3);
+        } while (this.currentPart === oldPart);
       } else {
-        // Moving down vertical line - default positions
-        // Determine which leg of Pi to follow based on angle
-        let legPosition;
-        if (this.pathParams.startAngle < Math.PI * 0.67) {
-          legPosition = -levelRadius * 0.4; // Left leg
-        } else if (this.pathParams.startAngle < Math.PI * 1.33) {
-          legPosition = 0; // Middle (for type 9)
-        } else {
-          legPosition = levelRadius * 0.4; // Right leg
-        }
-
-        // For crossing pi, allow swapping between legs
-        // if (this.enemy.movementStyle === "piCrossing" && normalizedDist > 0.7) {
-        //   const crossPhase = Math.floor((normalizedDist - 0.7) * 10);
-        //   if (crossPhase % 2 === 1) {
-        //     // Periodically swap legs
-        //     if (legPosition === -levelRadius * 0.4) {
-        //       legPosition = 0;
-        //     } else if (legPosition === 0) {
-        //       legPosition =
-        //         legPosition === -levelRadius * 0.4
-        //           ? levelRadius * 0.4
-        //           : -levelRadius * 0.4;
-        //     } else {
-        //       legPosition = 0;
-        //     }
-        //   }
-
-        //   // Add some subtle horizontal oscillation
-        //   legPosition += Math.sin(normalizedDist * 15) * 0.1 * levelRadius;
-        // }
-
-        x = legPosition;
-        y = -levelRadius * 0.15 - (normalizedDist - 0.5) * levelRadius * 0.85;
+        // Hit end of segment, reverse direction
+        this.progress = 1.0;
+        this.direction = -1;
       }
-
-      // Update angle for proper orientation
-      this.angle = Math.atan2(y, x);
-    } else {
-      x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
-      y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
+    } else if (this.progress <= 0.0) {
+      if (this.canJumpBetweenParts && Math.random() > 0.7) {
+        // Type 9: Sometimes jump to a random part instead of reversing
+        this.progress = 1.0;
+        const oldPart = this.currentPart;
+        do {
+          this.currentPart = Math.floor(Math.random() * 3);
+        } while (this.currentPart === oldPart);
+      } else {
+        // Hit start of segment, reverse direction
+        this.progress = 0.0;
+        this.direction = 1;
+        
+        // Type 8: Occasionally move to next segment when at a junction
+        if (!this.canJumpBetweenParts && Math.random() > 0.5) {
+          // Only switch segments if we're at a junction (top of a leg or end of horizontal)
+          if ((this.currentPart === 1 && this.progress === 0.0) ||  // Top of left leg
+              (this.currentPart === 2 && this.progress === 0.0) ||  // Top of right leg
+              (this.currentPart === 0 && (this.progress === 0.0 || this.progress === 1.0))) { // Ends of horizontal
+            this.currentPart = (this.currentPart + 1) % 3;
+          }
+        }
+      }
     }
-
+    
+    // Calculate position on the Pi symbol
+    const position = this.calculatePosition();
+    
+    // Update angle for proper orientation
+    this.angle = Math.atan2(position.y, position.x);
+    
+    return position;
+  }
+  
+  // Start the zipping process to another part of the Pi symbol
+  private startZipping(): void {
+    // Only for type 9
+    if (!this.canJumpBetweenParts) return;
+    
+    this.isZipping = true;
+    this.extensionProgress = 0;
+    this.crossingProgress = 0;
+    
+    // Select a target part different from current part
+    do {
+      this.targetPart = Math.floor(Math.random() * 3);
+    } while (this.targetPart === this.currentPart);
+    
+    // Randomize target progress position on the new segment
+    this.progress = Math.random();
+  }
+  
+  // Update the zipping movement (extending a line and crossing to a new part)
+  private updateZipping(delta: number): { x: number; y: number } {
+    if (this.targetPart === null) {
+      this.isZipping = false;
+      return this.calculatePosition();
+    }
+    
+    // Current position
+    const currentPosition = this.calculatePosition();
+    
+    // Phase 1: Extending a line toward the target part
+    if (this.extensionProgress < 1.0) {
+      this.extensionProgress += delta * 3; // Speed of extension
+      
+      // Keep the current position during extension
+      return currentPosition;
+    }
+    
+    // Phase 2: Zipping along the extended line
+    this.crossingProgress += delta * 8; // Speed of zip movement
+    
+    // If crossing is complete, transition to the target part
+    if (this.crossingProgress >= 1.0) {
+      this.currentPart = this.targetPart;
+      this.targetPart = null;
+      this.isZipping = false;
+      this.extensionProgress = 0;
+      this.crossingProgress = 0;
+      
+      // Ensure extension line is properly removed from scene when zipping completes
+      if (this.extensionLine && this.enemy && this.enemy.scene) {
+        this.removeExtensionLine(this.enemy.scene);
+      }
+      
+      // Return the new position on the target part
+      return this.calculatePosition();
+    }
+    
+    // During crossing, interpolate between current and target positions
+    // Calculate target position
+    const originalPart = this.currentPart;
+    this.currentPart = this.targetPart;
+    const targetPosition = this.calculatePosition();
+    this.currentPart = originalPart;
+    
+    // Apply easing for smoother transition
+    const easedProgress = this.easeInOutQuad(this.crossingProgress);
+    
+    const x = currentPosition.x + (targetPosition.x - currentPosition.x) * easedProgress;
+    const y = currentPosition.y + (targetPosition.y - currentPosition.y) * easedProgress;
+    
+    // Update angle for proper orientation during crossing
+    this.angle = Math.atan2(y, x);
+    
+    return { x, y };
+  }
+  
+  // Quadratic easing function for smoother transitions
+  private easeInOutQuad(t: number): number {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+  
+  // Render the extension line during zipping
+  render(scene: THREE.Scene): void {
+    try {
+      // Render extension line if in extension or crossing phase
+      if (this.isZipping && this.targetPart !== null) {
+        this.updateExtensionLine(scene);
+      } else {
+        // Always ensure extension line is removed when not zipping
+        this.removeExtensionLine(scene);
+      }
+    } catch (error) {
+      // If any error occurs during rendering, make sure to clean up
+      console.error("Error in PiMovementController render:", error);
+      this.removeExtensionLine(scene);
+    }
+  }
+  
+  cleanup(scene: THREE.Scene): void {
+    // Ensure the extension line is removed when enemy is destroyed
+    this.removeExtensionLine(scene);
+  }
+  
+  // Helper method to safely remove extension line
+  private removeExtensionLine(scene: THREE.Scene): void {
+    if (this.extensionLine) {
+      try {
+        scene.remove(this.extensionLine);
+      } catch (e) {
+        console.error("Error removing extension line:", e);
+      }
+      
+      // Dispose of geometry and material to prevent memory leaks
+      if (this.extensionLine.geometry) {
+        this.extensionLine.geometry.dispose();
+      }
+      
+      if (this.extensionLine.material) {
+        // Check if it's an array of materials or a single material
+        if (Array.isArray(this.extensionLine.material)) {
+          this.extensionLine.material.forEach(material => material.dispose());
+        } else {
+          this.extensionLine.material.dispose();
+        }
+      }
+      
+      this.extensionLine = undefined;
+    }
+    
+    // Reset zipping state to ensure we don't try to render lines in an invalid state
+    if (!this.isZipping) {
+      this.extensionProgress = 0;
+      this.crossingProgress = 0;
+      this.targetPart = null;
+    }
+  }
+  
+  private updateExtensionLine(scene: THREE.Scene): void {
+    if (this.targetPart === null) return;
+    
+    // Current position
+    const currentPosition = this.calculatePosition();
+    
+    // Calculate target position
+    const originalPart = this.currentPart;
+    this.currentPart = this.targetPart;
+    const targetPosition = this.calculatePosition();
+    this.currentPart = originalPart;
+    
+    // Calculate target position with extension progress
+    const targetX = currentPosition.x + (targetPosition.x - currentPosition.x) * this.extensionProgress;
+    const targetY = currentPosition.y + (targetPosition.y - currentPosition.y) * this.extensionProgress;
+    
+    // Create vector positions for line endpoints
+    const startPos = new THREE.Vector3(currentPosition.x, currentPosition.y, 0);
+    const endPos = new THREE.Vector3(targetX, targetY, 0);
+    
+    // Create or update line
+    if (!this.extensionLine) {
+      // Create line geometry
+      const lineGeometry = new THREE.BufferGeometry();
+      const linePositions = new Float32Array([
+        startPos.x, startPos.y, startPos.z,
+        endPos.x, endPos.y, endPos.z
+      ]);
+      
+      lineGeometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(linePositions, 3)
+      );
+      
+      // Create line material - color matches enemy
+      const enemyMaterial = this.enemy.mesh.material as THREE.MeshStandardMaterial;
+      const lineMaterial = new THREE.LineBasicMaterial({
+        color: enemyMaterial.color,
+        linewidth: 2,
+        opacity: 0.7,
+        transparent: true
+      });
+      
+      // Create line and add to scene
+      this.extensionLine = new THREE.Line(lineGeometry, lineMaterial);
+      scene.add(this.extensionLine);
+    } else {
+      // Update existing line
+      const positions = this.extensionLine.geometry.attributes.position.array as Float32Array;
+      
+      // Update start position
+      positions[0] = startPos.x;
+      positions[1] = startPos.y;
+      positions[2] = startPos.z;
+      
+      // Update end position
+      positions[3] = endPos.x;
+      positions[4] = endPos.y;
+      positions[5] = endPos.z;
+      
+      this.extensionLine.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+  
+  private calculatePosition(): { x: number, y: number } {
+    let x, y;
+    
+    switch (this.currentPart) {
+      case 0: // Horizontal bar
+        // Interpolate along the bar based on progress
+        x = this.horizontalBarStart.x + (this.horizontalBarEnd.x - this.horizontalBarStart.x) * this.progress;
+        y = this.horizontalBarStart.y; // Y remains constant for horizontal bar
+        break;
+        
+      case 1: // Left leg
+        x = this.leftLegStart.x; // X remains constant for vertical leg
+        // Interpolate along the left leg based on progress
+        y = this.leftLegStart.y + (this.leftLegEnd.y - this.leftLegStart.y) * this.progress;
+        break;
+        
+      case 2: // Right leg
+        x = this.rightLegStart.x; // X remains constant for vertical leg
+        // Interpolate along the right leg based on progress
+        y = this.rightLegStart.y + (this.rightLegEnd.y - this.rightLegStart.y) * this.progress;
+        break;
+    }
+    
     return { x, y };
   }
 }

@@ -36,6 +36,7 @@ export class ActiveMode implements GameMode {
     bullets: [],
     enemyBullets: [],
     ghostMode: false,
+    spawnEnemies: true, // Enemies spawn by default
   };
 
   constructor(
@@ -108,8 +109,8 @@ export class ActiveMode implements GameMode {
   public update(delta: number): void {
     const elapsedTime = this.clock.getElapsedTime();
 
-    // Create new enemies periodically
-    if (elapsedTime - this.lastEnemyTime > 1.5 && !this.transitionInProgress) {
+    // Create new enemies periodically if enemy spawning is enabled
+    if (this.modeState.spawnEnemies && elapsedTime - this.lastEnemyTime > 1.5 && !this.transitionInProgress) {
       this.enemyManager.createEnemy(this.level);
       this.lastEnemyTime = elapsedTime;
     }
@@ -350,67 +351,89 @@ export class ActiveMode implements GameMode {
   }
 
   private updateGhostModeDisplay(isActive: boolean): void {
-    // Get existing ghost mode display or create a new one
-    let ghostModeElement = document.getElementById("ghost-mode");
+    // Get existing status display or create a new one
+    let statusElement = document.getElementById("game-status");
 
-    if (!ghostModeElement) {
-      ghostModeElement = document.createElement("div");
-      ghostModeElement.id = "ghost-mode";
-      ghostModeElement.style.position = "absolute";
-      ghostModeElement.style.top = "60px";
-      ghostModeElement.style.right = "20px";
-      ghostModeElement.style.color = "#00FFFF";
-      ghostModeElement.style.fontFamily = "Arial, sans-serif";
-      ghostModeElement.style.fontSize = "20px";
-      document.body.appendChild(ghostModeElement);
+    if (!statusElement) {
+      statusElement = document.createElement("div");
+      statusElement.id = "game-status";
+      statusElement.style.position = "absolute";
+      statusElement.style.top = "60px";
+      statusElement.style.right = "20px";
+      statusElement.style.color = "#00FFFF";
+      statusElement.style.fontFamily = "Arial, sans-serif";
+      statusElement.style.fontSize = "20px";
+      statusElement.style.textAlign = "right";
+      document.body.appendChild(statusElement);
     }
 
+    // Build status text based on various modes
+    let statusText = "";
+    
+    // Add ghost mode status
     if (isActive) {
-      ghostModeElement.textContent = "GHOST MODE: ACTIVE";
-      ghostModeElement.style.display = "block";
+      statusText += "GHOST MODE: ACTIVE";
+    }
+    
+    // Add enemy spawning status
+    if (!this.modeState.spawnEnemies) {
+      if (statusText) statusText += "<br>";
+      statusText += "ENEMY SPAWNING: DISABLED";
+    }
+    
+    // Only display if we have something to show or if forced enemy type is set
+    if (statusText || this.modeState.forcedEnemyType !== undefined) {
+      statusElement.innerHTML = statusText;
+      statusElement.style.display = "block";
     } else {
-      // Only hide if we're not also showing forced enemy type
-      if (this.modeState.forcedEnemyType === undefined) {
-        ghostModeElement.style.display = "none";
-      }
+      statusElement.style.display = "none";
     }
 
     // Update forced enemy type display if applicable
     this.updateForcedEnemyTypeDisplay();
   }
+  
+  // Toggle enemy spawning on/off
+  public toggleEnemySpawning(): void {
+    if (this.transitionInProgress) return;
+    
+    this.modeState.spawnEnemies = !this.modeState.spawnEnemies;
+    
+    // Update the status display
+    this.updateGhostModeDisplay(this.modeState.ghostMode);
+  }
 
   private updateForcedEnemyTypeDisplay(): void {
-    // Get existing ghost mode display since we'll append to it
-    let ghostModeElement = document.getElementById("ghost-mode");
+    // Get existing status display
+    let statusElement = document.getElementById("game-status");
 
-    if (!ghostModeElement) {
+    if (!statusElement) {
       // Create it if it doesn't exist
-      ghostModeElement = document.createElement("div");
-      ghostModeElement.id = "ghost-mode";
-      ghostModeElement.style.position = "absolute";
-      ghostModeElement.style.top = "60px";
-      ghostModeElement.style.right = "20px";
-      ghostModeElement.style.color = "#00FFFF";
-      ghostModeElement.style.fontFamily = "Arial, sans-serif";
-      ghostModeElement.style.fontSize = "20px";
-      document.body.appendChild(ghostModeElement);
+      statusElement = document.createElement("div");
+      statusElement.id = "game-status";
+      statusElement.style.position = "absolute";
+      statusElement.style.top = "60px";
+      statusElement.style.right = "20px";
+      statusElement.style.color = "#00FFFF";
+      statusElement.style.fontFamily = "Arial, sans-serif";
+      statusElement.style.fontSize = "20px";
+      statusElement.style.textAlign = "right";
+      document.body.appendChild(statusElement);
     }
 
     if (this.modeState.forcedEnemyType !== undefined) {
-      // Determine text based on ghost mode state
-      let ghostText = this.modeState.ghostMode ? "GHOST MODE: ACTIVE" : "";
+      // Get current status text and append enemy type info
+      let statusText = statusElement.innerHTML;
+      
       // Add enemy type info
-      ghostText += ghostText ? "<br>" : "";
-      ghostText += `SPAWNING ENEMY TYPE: ${Enemy.name(
+      if (statusText) statusText += "<br>";
+      statusText += `SPAWNING ENEMY TYPE: ${Enemy.name(
         this.modeState.forcedEnemyType
       )}`;
 
       // Update display
-      ghostModeElement.innerHTML = ghostText;
-      ghostModeElement.style.display = "block";
-    } else if (!this.modeState.ghostMode) {
-      // Hide display if not in ghost mode and not forcing enemy type
-      ghostModeElement.style.display = "none";
+      statusElement.innerHTML = statusText;
+      statusElement.style.display = "block";
     }
   }
 
@@ -748,6 +771,9 @@ export class ActiveMode implements GameMode {
         break;
       case "g": // Add "g" key to toggle ghost mode
         this.toggleGhostMode();
+        break;
+      case "s": // Add "s" key to toggle enemy spawning
+        this.toggleEnemySpawning();
         break;
       case "e": // Add "e" key to force spawn specific enemy type
         this.cycleEnemyType();

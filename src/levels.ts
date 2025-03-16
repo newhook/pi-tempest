@@ -109,6 +109,35 @@ export class Level {
     return this.spokePositions;
   }
 
+  // Helper method to get the Pi symbol vertices
+  public getPiSymbolVertices(scale: number = this.radius * 0.5): number[] {
+    return [
+      // Top horizontal line
+      -0.6 * scale,
+      0.5 * scale,
+      0,
+      0.6 * scale,
+      0.5 * scale,
+      0,
+
+      // Left vertical line
+      -0.4 * scale,
+      0.5 * scale,
+      0,
+      -0.4 * scale,
+      -0.5 * scale,
+      0,
+
+      // Right vertical line
+      0.4 * scale,
+      0.5 * scale,
+      0,
+      0.4 * scale,
+      -0.3 * scale,
+      0,
+    ];
+  }
+
   public collidesWithEnemy(enemy: Enemy): boolean {
     // XXX: this isn't correct. It should check the outer geometry of the level.
     return enemy.isOffscreen(this.radius);
@@ -373,31 +402,7 @@ export class Level {
     const scale = this.radius * 0.5;
 
     // Pi symbol vertices (simplified)
-    const piVertices = [
-      // Top horizontal line
-      -0.6 * scale,
-      0.5 * scale,
-      0,
-      0.6 * scale,
-      0.5 * scale,
-      0,
-
-      // Left vertical line
-      -0.4 * scale,
-      0.5 * scale,
-      0,
-      -0.4 * scale,
-      -0.5 * scale,
-      0,
-
-      // Right vertical line
-      0.4 * scale,
-      0.5 * scale,
-      0,
-      0.4 * scale,
-      -0.3 * scale,
-      0,
-    ];
+    const piVertices = this.getPiSymbolVertices(scale);
 
     piGeometry.setAttribute(
       "position",

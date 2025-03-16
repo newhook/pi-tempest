@@ -21,6 +21,7 @@ export interface ActiveModeState {
   bullets: Bullet[];
   enemyBullets: Bullet[]; // Bullets fired by enemies
   ghostMode: boolean;
+  spawnEnemies: boolean; // Toggle for enabling/disabling enemy spawning
   playerPosition?: { x: number; y: number }; // Added for enemy targeting
   forcedEnemyType?: number; // If set, spawn this specific enemy type
 }
