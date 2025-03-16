@@ -26,6 +26,7 @@ abstract class BaseMovementController implements MovementController {
 // Simple spoke movement - straight outward along spokes
 export class SpokeMovementController extends BaseMovementController {
   private spokePosition: SpokePosition;
+  private distanceFromCenter: number = 0;
 
   constructor(enemy: Enemy) {
     super(enemy);
@@ -46,8 +47,10 @@ export class SpokeMovementController extends BaseMovementController {
   }
 
   update(delta: number): { x: number; y: number } {
+    this.distanceFromCenter += this.enemy.speed * delta * 30;
+
     // Calculate position along the spoke using the stored spoke position
-    const t = this.enemy.distanceFromCenter / this.enemy.level.getRadius();
+    const t = this.distanceFromCenter / this.enemy.level.getRadius();
 
     // Interpolate between inner and outer positions of the spoke
     const x =
@@ -72,6 +75,7 @@ export class SpokeCrossingMovementController extends BaseMovementController {
   protected nextTransitionDistance: number;
   protected extensionLine?: THREE.Line;
   protected maxJumpDistance: number = 1; // Only adjacent spokes by default
+  private distanceFromCenter: number = 0;
 
   constructor(enemy: Enemy) {
     super(enemy);
@@ -105,28 +109,20 @@ export class SpokeCrossingMovementController extends BaseMovementController {
   }
 
   update(delta: number): { x: number; y: number } {
+    this.distanceFromCenter += this.enemy.speed * delta * 30;
     const levelRadius = this.enemy.level.getRadius();
-
-    // Get current spoke position
-    if (this.spokePositions.length === 0) {
-      // Fallback if no spoke positions available
-      return {
-        x: Math.cos(this.angle) * this.enemy.distanceFromCenter,
-        y: Math.sin(this.angle) * this.enemy.distanceFromCenter,
-      };
-    }
 
     const currentSpoke =
       this.spokePositions[this.spokeIndex % this.spokePositions.length];
 
     // Calculate position along the current spoke using t-value
-    const t = this.enemy.distanceFromCenter / levelRadius;
+    const t = this.distanceFromCenter / levelRadius;
 
     // Check if we need to start a crossing
     if (
       !this.isExtending &&
       this.targetSpokeIndex === null &&
-      this.enemy.distanceFromCenter >= this.nextTransitionDistance
+      this.distanceFromCenter >= this.nextTransitionDistance
     ) {
       // Start the extension phase
       this.isExtending = true;
@@ -190,7 +186,7 @@ export class SpokeCrossingMovementController extends BaseMovementController {
 
         // Set next transition distance
         this.nextTransitionDistance =
-          this.enemy.distanceFromCenter + 1 + Math.random() * 2;
+          this.distanceFromCenter + 1 + Math.random() * 2;
 
         // Update the angle for proper orientation
         const newSpoke =
@@ -269,7 +265,7 @@ export class SpokeCrossingMovementController extends BaseMovementController {
       this.spokePositions[this.targetSpokeIndex % this.spokePositions.length];
 
     // Calculate normalized distance for current position
-    const t = this.enemy.distanceFromCenter / this.enemy.level.getRadius();
+    const t = this.distanceFromCenter / this.enemy.level.getRadius();
 
     // Calculate current position on current spoke
     const currentX =
@@ -352,16 +348,17 @@ export class ZigzagMovementController extends SpokeCrossingMovementController {
 
 // Circular movement - orbits instead of moving outward
 export class CircularMovementController extends BaseMovementController {
+  private distanceFromCenter: number = 0;
   constructor(enemy: Enemy) {
     super(enemy);
   }
 
   update(delta: number): { x: number; y: number } {
-    // Increment angle for circular motion
+    this.distanceFromCenter += this.enemy.speed * delta * 30;
     this.angle = this.angle + delta * 0.5;
 
-    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
+    const x = Math.cos(this.angle) * this.distanceFromCenter;
+    const y = Math.sin(this.angle) * this.distanceFromCenter;
 
     return { x, y };
   }
@@ -369,11 +366,13 @@ export class CircularMovementController extends BaseMovementController {
 
 // Homing movement - enemy seeks the player
 export class HomingMovementController extends BaseMovementController {
+  private distanceFromCenter: number = 0;
   constructor(enemy: Enemy) {
     super(enemy);
   }
 
   update(delta: number): { x: number; y: number } {
+    this.distanceFromCenter += this.enemy.speed * delta * 30;
     const levelRadius = this.enemy.level.getRadius();
     // Get current enemy position
     const enemyPosX = this.enemy.mesh.position.x;
@@ -405,24 +404,20 @@ export class HomingMovementController extends BaseMovementController {
 
     // Base turn rate - distance-based for smoother targeting
     // As enemy gets closer to player, it turns more smoothly and precisely
-    const distanceFactor = Math.min(
-      0.8,
-      this.enemy.distanceFromCenter / levelRadius
-    );
+    const distanceFactor = Math.min(0.8, this.distanceFromCenter / levelRadius);
     const turnRate = 1.5 + distanceFactor * 1.0; // Increased turn rate for more responsive homing
 
     // Apply distance-based behavior dampening
     // Reduce oscillation as enemies get closer to edge (where player is)
-    const proximityDampen =
-      1 - (this.enemy.distanceFromCenter / levelRadius) * 0.5;
+    const proximityDampen = 1 - (this.distanceFromCenter / levelRadius) * 0.5;
 
     // 1. Subtle "hunting" oscillation - reduced when close to player
     const huntingOscillation =
-      Math.sin(this.enemy.distanceFromCenter * 2) * 0.01 * proximityDampen;
+      Math.sin(this.distanceFromCenter * 2) * 0.01 * proximityDampen;
 
     // 2. Very mild course corrections - also reduced when close
     const courseCorrection =
-      Math.sin(this.enemy.distanceFromCenter * 3) * 0.01 * proximityDampen;
+      Math.sin(this.distanceFromCenter * 3) * 0.01 * proximityDampen;
 
     // 3. Extremely tiny random jitter - just for a touch of life
     const tinyJitter = (Math.random() - 0.5) * 0.005 * proximityDampen;
@@ -446,8 +441,8 @@ export class HomingMovementController extends BaseMovementController {
     this.angle = this.angle + totalTurn;
 
     // Calculate new position
-    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
+    const x = Math.cos(this.angle) * this.distanceFromCenter;
+    const y = Math.sin(this.angle) * this.distanceFromCenter;
 
     return { x, y };
   }
@@ -854,228 +849,6 @@ export class PiMovementController extends BaseMovementController {
   }
 }
 
-// Spiral movement
-export class SpiralMovementController extends BaseMovementController {
-  private pathParams?: {
-    startAngle: number;
-    spiralTightness: number;
-    waveAmplitude: number;
-    waveFrequency: number;
-    pathOffset: number;
-  };
-  constructor(enemy: Enemy) {
-    super(enemy);
-    this.pathParams = {
-      startAngle: this.angle,
-      spiralTightness: 0.1 + Math.random() * 0.3,
-      waveAmplitude: 0.5 + Math.random() * 1.2,
-      waveFrequency: 2 + Math.random() * 4,
-      pathOffset: Math.random() * Math.PI * 2,
-    };
-  }
-
-  update(delta: number): { x: number; y: number } {
-    // Spiral path - angle changes as distance increases
-    if (this.pathParams) {
-      // if (this.enemy.movementStyle === "spiralCrossing") {
-      //   // Add cross-path variation to the spiral
-      //   angle =
-      //     this.pathParams.startAngle +
-      //     this.enemy.distanceFromCenter *
-      //       this.pathParams.spiralTightness +
-      //     Math.sin(this.enemy.distanceFromCenter * 0.2) * 0.5; // Add oscillation for crossing
-      // } else {
-      //   // Regular spiral
-      //   angle =
-      //     this.pathParams.startAngle +
-      //     this.enemy.distanceFromCenter * this.pathParams.spiralTightness;
-      // }
-      // Regular spiral
-      this.angle =
-        this.pathParams.startAngle +
-        this.enemy.distanceFromCenter * this.pathParams.spiralTightness;
-    }
-
-    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
-
-    return { x, y };
-  }
-}
-
-// Wave movement
-export class WaveMovementController extends BaseMovementController {
-  private pathParams?: {
-    startAngle: number;
-    spiralTightness: number;
-    waveAmplitude: number;
-    waveFrequency: number;
-    pathOffset: number;
-  };
-  constructor(enemy: Enemy) {
-    super(enemy);
-    this.pathParams = {
-      startAngle: this.angle,
-      spiralTightness: 0.1 + Math.random() * 0.3,
-      waveAmplitude: 0.5 + Math.random() * 1.2,
-      waveFrequency: 2 + Math.random() * 4,
-      pathOffset: Math.random() * Math.PI * 2,
-    };
-  }
-
-  update(delta: number): { x: number; y: number } {
-    const levelRadius = this.enemy.level.getRadius();
-
-    // Wave path - sinusoidal movement
-    if (this.pathParams) {
-      // Base angle determines the spoke we're moving along
-      const baseAngle = this.pathParams.startAngle;
-
-      // Calculate wave offset
-      let waveOffset =
-        (Math.sin(
-          (this.enemy.distanceFromCenter * this.pathParams.waveFrequency) /
-            levelRadius
-        ) *
-          this.pathParams.waveAmplitude) /
-        levelRadius;
-
-      // // For crossing waves, add an additional perpendicular wave component
-      // if (this.enemy.movementStyle === "waveCrossing") {
-      //   // Add a secondary wave that's out of phase
-      //   const secondaryWave =
-      //     (Math.cos(
-      //       (this.enemy.distanceFromCenter *
-      //         this.pathParams.waveFrequency *
-      //         1.5) /
-      //         levelRadius
-      //     ) *
-      //       this.pathParams.waveAmplitude *
-      //       0.7) /
-      //     levelRadius;
-
-      //   // Combine the waves
-      //   waveOffset += secondaryWave;
-      // }
-
-      this.angle = baseAngle + waveOffset;
-    }
-
-    const x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
-    const y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
-
-    return { x, y };
-  }
-}
-
-// Star movement
-export class StarMovementController extends BaseMovementController {
-  private pathParams?: {
-    startAngle: number;
-    spiralTightness: number;
-    waveAmplitude: number;
-    waveFrequency: number;
-    pathOffset: number;
-  };
-  constructor(enemy: Enemy) {
-    super(enemy);
-    this.pathParams = {
-      startAngle: this.angle,
-      spiralTightness: 0.1 + Math.random() * 0.3,
-      waveAmplitude: 0.5 + Math.random() * 1.2,
-      waveFrequency: 2 + Math.random() * 4,
-      pathOffset: Math.random() * Math.PI * 2,
-    };
-  }
-
-  update(delta: number): { x: number; y: number } {
-    const levelRadius = this.enemy.level.getRadius();
-    let x, y;
-
-    // Star path
-    if (this.pathParams) {
-      // Number of star points increases with level
-      const starPoints =
-        3 + (Math.floor(this.pathParams.waveFrequency * 2) % 5);
-      const pointAngle = (Math.PI * 2) / starPoints;
-
-      // Calculate which point we're moving toward
-      let pointIndex = Math.floor(
-        (this.pathParams.startAngle / (Math.PI * 2)) * starPoints
-      );
-
-      // // For crossing stars, occasionally jump to a different point
-      // if (this.enemy.movementStyle === "starCrossing") {
-      //   const jumpPhase = Math.floor(
-      //     this.enemy.distanceFromCenter / (levelRadius * 0.2)
-      //   );
-      //   if (
-      //     jumpPhase % 3 === 0 &&
-      //     this.enemy.distanceFromCenter > levelRadius * 0.3
-      //   ) {
-      //     // Jump to a different point randomly
-      //     pointIndex =
-      //       (pointIndex + 1 + Math.floor(Math.random() * (starPoints - 2))) %
-      //       starPoints;
-      //   }
-      // }
-
-      const nextPointIndex = (pointIndex + 1) % starPoints;
-
-      // Calculate angle to current and next point
-      const currentPointAngle = pointIndex * pointAngle;
-      const nextPointAngle = nextPointIndex * pointAngle;
-
-      // Interpolate between inner and outer radius
-      const innerRadius = levelRadius * 0.4;
-      const outerRadius = levelRadius;
-
-      // Determine if we're moving to outer point or inner corner
-      const toOuter =
-        Math.floor((this.enemy.distanceFromCenter / levelRadius) * 10) % 2 ===
-        0;
-
-      // For crossing stars, add some oscillation to the angle
-      let targetAngle;
-      if (toOuter) {
-        // Moving to outer point
-        targetAngle = currentPointAngle;
-        // if (this.enemy.movementStyle === "starCrossing") {
-        //   // Add slight wobble when moving to points
-        //   targetAngle += Math.sin(this.enemy.distanceFromCenter * 2) * 0.1;
-        // }
-      } else {
-        // Moving to inner corner
-        targetAngle = currentPointAngle + pointAngle / 2;
-        // if (this.enemy.movementStyle === "starCrossing") {
-        //   // Add slight wobble when moving to corners
-        //   targetAngle += Math.cos(this.enemy.distanceFromCenter * 3) * 0.15;
-        // }
-      }
-
-      this.angle = targetAngle;
-
-      const currentRadius = toOuter
-        ? innerRadius +
-          ((outerRadius - innerRadius) *
-            (this.enemy.distanceFromCenter % (levelRadius / 5))) /
-            (levelRadius / 5)
-        : outerRadius -
-          ((outerRadius - innerRadius) *
-            (this.enemy.distanceFromCenter % (levelRadius / 5))) /
-            (levelRadius / 5);
-
-      x = Math.cos(this.angle) * currentRadius;
-      y = Math.sin(this.angle) * currentRadius;
-    } else {
-      x = Math.cos(this.angle) * this.enemy.distanceFromCenter;
-      y = Math.sin(this.angle) * this.enemy.distanceFromCenter;
-    }
-
-    return { x, y };
-  }
-}
-
 // Erratic movement - moves chaotically, periodically stops and spawns enemies
 export class ErraticMovementController extends BaseMovementController {
   private lastSpawnTime: number = 0;
@@ -1085,6 +858,7 @@ export class ErraticMovementController extends BaseMovementController {
   private timeBetweenSpawns: number = 5.0; // Spawn every 5 seconds
   private spokePosition: SpokePosition;
   private elapsedTime: number = 0;
+  private distanceFromCenter: number = 0;
 
   constructor(enemy: Enemy) {
     super(enemy);
@@ -1105,6 +879,7 @@ export class ErraticMovementController extends BaseMovementController {
   }
 
   update(delta: number): { x: number; y: number } {
+    this.distanceFromCenter += this.enemy.speed * delta * 30;
     const levelRadius = this.enemy.level.getRadius();
     this.elapsedTime += delta;
 
@@ -1142,17 +917,17 @@ export class ErraticMovementController extends BaseMovementController {
 
       // Add some erratic angle changes
       this.angle +=
-        (Math.sin(this.enemy.distanceFromCenter * 0.5) +
-          Math.cos(this.enemy.distanceFromCenter * 0.3)) *
+        (Math.sin(this.distanceFromCenter * 0.5) +
+          Math.cos(this.distanceFromCenter * 0.3)) *
           0.1 +
         (Math.random() - 0.5) * 0.08;
 
       // Calculate position based on updated angle
-      const randomX = Math.cos(this.angle) * this.enemy.distanceFromCenter;
-      const randomY = Math.sin(this.angle) * this.enemy.distanceFromCenter;
+      const randomX = Math.cos(this.angle) * this.distanceFromCenter;
+      const randomY = Math.sin(this.angle) * this.distanceFromCenter;
 
       // Calculate position on spoke for partial guidance
-      const t = this.enemy.distanceFromCenter / levelRadius;
+      const t = this.distanceFromCenter / levelRadius;
       const spokeX =
         this.spokePosition.innerX +
         (this.spokePosition.outerX - this.spokePosition.innerX) * t;
@@ -1248,6 +1023,7 @@ export class ErraticMovementController extends BaseMovementController {
 export class BounceMovementController extends BaseMovementController {
   private spokePosition: SpokePosition;
   private bounceScale: number;
+  private distanceFromCenter: number = 0;
 
   constructor(enemy: Enemy) {
     super(enemy);
@@ -1271,10 +1047,11 @@ export class BounceMovementController extends BaseMovementController {
   }
 
   update(delta: number): { x: number; y: number } {
+    this.distanceFromCenter += this.enemy.speed * delta * 30;
     const levelRadius = this.enemy.level.getRadius();
 
     // Calculate normalized distance and maintain original distance for calculations
-    const originalDistance = this.enemy.distanceFromCenter;
+    const originalDistance = this.distanceFromCenter;
     let adjustedDistance = originalDistance;
 
     // Calculate bounce parameters - a bounce every 20% of the level radius
@@ -1324,7 +1101,6 @@ export class LinearMovementController extends BaseMovementController {
     y =
       this.enemy.mesh.position.y +
       this.direction.y * this.enemy.speed * delta * 30;
-    this.enemy.distanceFromCenter = Math.sqrt(x * x + y * y);
 
     return { x, y };
   }

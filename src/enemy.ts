@@ -7,9 +7,6 @@ import {
   CircularMovementController,
   HomingMovementController,
   PiMovementController,
-  SpiralMovementController,
-  WaveMovementController,
-  StarMovementController,
   ErraticMovementController,
   BounceMovementController,
   LinearMovementController,
@@ -79,6 +76,11 @@ export class Enemy {
     // Get the current level type
     const levelType = level.levelType;
 
+    // Assign hitpoints and speed based on enemy type
+    const { hitPoints, speedMultiplier } = this.getBehavior();
+    this.hitPoints = hitPoints;
+    this.speed = this.modeState.enemySpeed * speedMultiplier;
+
     // Assign movement style based on enemy type
     switch (type) {
       case 0: // Type 0: Always follows spokes
@@ -145,22 +147,19 @@ export class Enemy {
         this.movementController = new SpokeMovementController(this);
     }
 
-    // Assign hitpoints and speed based on enemy type
-    const { hitPoints, speedMultiplier } = this.getBehavior();
-    this.hitPoints = hitPoints;
-    this.speed = this.modeState.enemySpeed * speedMultiplier;
-
     // Randomize size slightly
     this.size = 0.3 + this.type / 20 + Math.random() * 0.1;
   }
 
   // Update enemy position based on movement style
   update(delta: number): void {
-    // Increment distance from center for all movement types
-    this.distanceFromCenter += this.speed * delta * 30;
-
     // Use the movement controller to update position and angle
     const result = this.movementController.update(delta);
+
+    // Increment distance from center for all movement types
+    this.distanceFromCenter = Math.sqrt(
+      result.x * result.x + result.y * result.y
+    );
 
     // Apply the position and angle from the controller
     this.mesh.position.set(result.x, result.y, 0);
@@ -212,11 +211,6 @@ export class Enemy {
     // audio.play();
 
     this.remove();
-  }
-
-  // Check if enemy is outside the level boundary
-  isOffscreen(levelRadius: number): boolean {
-    return this.distanceFromCenter > levelRadius + 2;
   }
 
   // Try to fire a bullet at the player

@@ -139,8 +139,47 @@ export class Level {
   }
 
   public collidesWithEnemy(enemy: Enemy): boolean {
-    // XXX: this isn't correct. It should check the outer geometry of the level.
-    return enemy.isOffscreen(this.radius);
+    // Get enemy position and size
+    const enemyPos = enemy.mesh.position;
+    const enemyDistanceFromCenter = Math.sqrt(
+      enemyPos.x * enemyPos.x + enemyPos.y * enemyPos.y
+    );
+    
+    // Include the enemy's size in the collision check
+    // This ensures we detect collision when the enemy's edge touches the level boundary
+    const effectiveDistance = enemyDistanceFromCenter + enemy.size;
+    
+    // Check if enemy has reached or passed the outer boundary of the level
+    switch (this.levelType) {
+      case LevelType.Star:
+        // For star levels, collision depends on the angle (star points extend further than inward sections)
+        const angle = Math.atan2(enemyPos.y, enemyPos.x);
+        const starPoints = 3 + (this.levelNumber % 5);
+        const anglePerPoint = (Math.PI * 2) / starPoints;
+        const pointIndex = Math.floor(angle / anglePerPoint);
+        const pointAngle = pointIndex * anglePerPoint;
+        
+        // Calculate radius at this angle (alternating between outer point and inner corner)
+        const isOuterPoint = pointIndex % 2 === 0;
+        const radiusAtAngle = isOuterPoint ? this.radius : this.radius * 0.6;
+        
+        return effectiveDistance >= radiusAtAngle;
+        
+      case LevelType.Wave:
+        // For wave levels, boundary has a sine wave pattern
+        const waveAngle = Math.atan2(enemyPos.y, enemyPos.x);
+        const amplitude = this.radius * 0.05; // Same amplitude as in createWaveLevel
+        const waveRadius = this.radius + Math.sin(waveAngle * 3.14) * amplitude;
+        
+        return effectiveDistance >= waveRadius;
+        
+      case LevelType.PiSymbol:
+      case LevelType.Circle:
+      case LevelType.Spiral:
+      default:
+        // For regular circular levels, a simple radius check is sufficient
+        return effectiveDistance >= this.radius;
+    }
   }
 
   // Create a basic circular level
