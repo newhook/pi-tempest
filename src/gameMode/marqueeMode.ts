@@ -36,7 +36,7 @@ export class MarqueeMode implements GameMode {
 
     // Title
     const titleElement = document.createElement("h1");
-    titleElement.textContent = "TEMPEST";
+    titleElement.textContent = "BLOOD MOON";
     titleElement.style.fontSize = "64px";
     titleElement.style.margin = "20px 0";
     titleElement.style.textShadow = "0 0 10px #FF0000";

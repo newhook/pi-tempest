@@ -351,8 +351,10 @@ export class EnemyManager {
       const enemy = this.modeState.enemies[i];
 
       if (level.collidesWithEnemy(enemy)) {
-        // Create explosion at the boundary
-        this.createBoundaryExplosion(enemy, level);
+        if (enemy.type != 10) {
+          // Create explosion at the boundary
+          this.createBoundaryExplosion(enemy, level);
+        }
 
         // Remove the enemy
         enemy.remove();

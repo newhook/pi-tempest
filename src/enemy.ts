@@ -782,8 +782,10 @@ export class Enemy {
 
   // Create smaller spheres on explosion
   private createAdditionalEnemies(position: THREE.Vector3): void {
-    // Create three smaller spheres with random directions
-    for (let i = 0; i < 3; i++) {
+    // Create a random number (1-4) of smaller spheres
+    const enemyCount = 1 + Math.floor(Math.random() * 4);
+
+    for (let i = 0; i < enemyCount; i++) {
       // Create a smaller sphere enemy
       const geometry = new THREE.SphereGeometry(0.2, 8, 8);
 
