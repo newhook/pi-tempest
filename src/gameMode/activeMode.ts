@@ -18,7 +18,6 @@ export class ActiveMode implements GameMode {
   private lastEnemyTime: number = 0;
   private level!: Level;
   private levelRadius: number = 10;
-  private currentLevelType: LevelType = LevelType.Circle;
   private bloodMoon: BloodMoon;
   private transitionInProgress: boolean = false;
   private keys = {
@@ -311,10 +310,6 @@ export class ActiveMode implements GameMode {
     this.level = new Level(this.gameState.currentLevel, this.levelRadius);
     this.sceneSetup.scene.add(this.level.getGroup());
 
-    // Update the current level type
-    this.currentLevelType = ((this.gameState.currentLevel - 1) %
-      5) as LevelType;
-
     // Reset enemy spawning to random
     this.modeState.forcedEnemyType = undefined;
     this.updateForcedEnemyTypeDisplay();
@@ -505,7 +500,7 @@ export class ActiveMode implements GameMode {
   private getPositionOnLevelOutline(angle: number): { x: number; y: number } {
     let x: number, y: number;
 
-    switch (this.currentLevelType) {
+    switch (this.level.levelType) {
       case LevelType.Circle:
       case LevelType.Spiral:
       case LevelType.PiSymbol:
@@ -720,35 +715,34 @@ export class ActiveMode implements GameMode {
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         if (distance < enemy.size + 0.2) {
-          // Collision detected
+          // Collision detected - apply damage to the enemy
+          const enemyDestroyed = enemy.takeDamage();
 
-          // Trigger enemy explosion.
-          enemy.explode();
+          if (enemyDestroyed) {
+            // Trigger explosion effect
+            enemy.explode();
 
-          this.modeState.enemies.splice(j, 1);
+            // Remove enemy from the list
+            this.modeState.enemies.splice(j, 1);
 
-          // Calculate score based on enemy type (pi-based)
-          const piMultiplier = 3.14 * this.gameState.currentLevel;
-          const points = Math.floor(enemy.type * piMultiplier);
-          this.gameState.score += points;
+            this.gameState.score += enemy.getPoints();
+            updateScore(this.gameState);
 
-          updateScore(this.gameState);
+            // Increase difficulty every 100 points
+            if (this.gameState.score % 100 === 0) {
+              this.modeState.enemySpeed += 0.005;
+            }
 
-          // Remove the bullet
+            // Level up every 314 points
+            if (this.gameState.score > this.gameState.currentLevel * 314) {
+              this.levelUp();
+            }
+          }
+
+          // Remove the bullet regardless of whether enemy was destroyed
           this.sceneSetup.scene.remove(bullet.mesh);
           this.modeState.bullets.splice(i, 1);
           hitDetected = true;
-
-          // Increase difficulty every 100 points
-          if (this.gameState.score % 100 === 0) {
-            this.modeState.enemySpeed += 0.005;
-          }
-
-          // Level up every 314 points
-          if (this.gameState.score > this.gameState.currentLevel * 314) {
-            this.levelUp();
-          }
-
           break;
         }
       }
