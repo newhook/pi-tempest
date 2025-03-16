@@ -3,6 +3,7 @@ import { GameState } from "../types";
 import { GameMode } from "./gameMode";
 import { SceneSetup } from "../scene";
 import { BloodMoon } from "../bloodMoon";
+import { SoundManager } from "../synth";
 
 export class MarqueeMode implements GameMode {
   private sceneSetup: SceneSetup;
@@ -81,13 +82,6 @@ export class MarqueeMode implements GameMode {
     instructionsElement.style.maxWidth = "600px";
     instructionsElement.style.margin = "20px 0";
     instructionsElement.style.textShadow = "0 0 5px #FF0000";
-    instructionsElement.innerHTML = `
-      <p>Use arrow keys or mouse to move</p>
-      <p>Click or press space to shoot</p>
-      <p>Press G to toggle ghost mode</p>
-      <p>Press S to toggle enemy spawning</p>
-      <p>Press SPACE or ENTER to start game</p>
-    `;
     marqueeContainer.appendChild(instructionsElement);
 
     this.marqueeContainer = marqueeContainer;
@@ -100,6 +94,9 @@ export class MarqueeMode implements GameMode {
     document.body.appendChild(this.marqueeContainer);
     this.bloodMoon.enter();
 
+    // Hide UI elements that shouldn't appear on the marquee screen
+    this.hideUIElements();
+
     // Set up the Blood Moon for marquee mode
     // Move it to a visible position (slightly to the side for better aesthetics)
     this.bloodMoon.getGroup().position.set(-8, -5, -20);
@@ -109,6 +106,19 @@ export class MarqueeMode implements GameMode {
 
     // Start the pulsation timer
     this.startBloodMoonAnimation();
+  }
+  
+  // Hide UI elements on marquee screen
+  private hideUIElements(): void {
+    // Hide score, lives, level, and timer displays
+    const elementsToHide = ['score', 'lives', 'level', 'countdown-timer'];
+    
+    elementsToHide.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.style.display = 'none';
+      }
+    });
   }
 
   public update(delta: number): void {
@@ -240,7 +250,46 @@ export class MarqueeMode implements GameMode {
     // In marquee mode, space or enter can start the game
     if (event.key === " " || event.key === "Enter") {
       this.startGame();
+    } else if (event.key === "m") {
+      // Toggle sound mute
+      SoundManager.getInstance().toggleMute();
+      this.showSoundStatus();
     }
+  }
+
+  private showSoundStatus(): void {
+    const isMuted = SoundManager.getInstance().isSoundMuted();
+
+    // Create temporary message
+    const message = document.createElement("div");
+    message.textContent = isMuted ? "SOUND: OFF" : "SOUND: ON";
+    message.style.position = "absolute";
+    message.style.top = "20%";
+    message.style.left = "50%";
+    message.style.transform = "translateX(-50%)";
+    message.style.color = "#00FFFF";
+    message.style.fontFamily = "Arial, sans-serif";
+    message.style.fontSize = "24px";
+    message.style.fontWeight = "bold";
+    message.style.textShadow = "0 0 5px #00FFFF";
+    message.style.zIndex = "1001";
+    message.id = "sound-status-text";
+
+    // Remove existing message if any
+    const existingMessage = document.getElementById("sound-status-text");
+    if (existingMessage) {
+      document.body.removeChild(existingMessage);
+    }
+
+    document.body.appendChild(message);
+
+    // Remove after 1.5 seconds
+    setTimeout(() => {
+      const textElement = document.getElementById("sound-status-text");
+      if (textElement && textElement.parentNode) {
+        document.body.removeChild(textElement);
+      }
+    }, 1500);
   }
 
   public handleKeyUp(event: KeyboardEvent): void {
@@ -267,20 +316,23 @@ export class MarqueeMode implements GameMode {
     // No specific touch start handling needed for marquee mode
     // Start button has its own click handler
   }
-  
+
   public handleMouseDown(event: MouseEvent): void {
     // No specific mouse down handling needed for marquee mode
   }
-  
+
   public handleMouseUp(event: MouseEvent): void {
     // No specific mouse up handling needed for marquee mode
   }
-  
+
   public handleTouchEnd(event: TouchEvent): void {
     // No specific touch end handling needed for marquee mode
   }
 
   private startGame(): void {
+    // Play a sound when starting the game
+    SoundManager.getInstance().playLevelStart();
+
     // Transition to active game mode
     document.dispatchEvent(
       new CustomEvent("gameStatusChanged", {

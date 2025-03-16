@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GameState } from "../types";
 import { GameMode } from "./gameMode";
 import { SceneSetup } from "../scene";
+import { SoundManager } from "../synth";
 
 export class GameOverMode implements GameMode {
   private sceneSetup: SceneSetup;
@@ -13,6 +14,11 @@ export class GameOverMode implements GameMode {
   }
 
   public enter(): void {
+    // Let the background music play for a moment before stopping
+    setTimeout(() => {
+      SoundManager.getInstance().stopAllSounds();
+    }, 2000);
+    
     // Display game over UI
     this.showGameOver();
   }
@@ -31,7 +37,7 @@ export class GameOverMode implements GameMode {
     if (gameOverElement) {
       document.body.removeChild(gameOverElement);
     }
-    
+
     // Reset game state if transitioning back to marquee
     this.resetGameState();
   }
@@ -39,9 +45,53 @@ export class GameOverMode implements GameMode {
   // Input handling methods
   public handleKeyDown(event: KeyboardEvent): void {
     // Space, Enter, or R to retry
-    if (event.key === " " || event.key === "Enter" || event.key === "r" || event.key === "R") {
+    if (
+      event.key === " " ||
+      event.key === "Enter" ||
+      event.key === "r" ||
+      event.key === "R"
+    ) {
       this.restartGame();
+    } else if (event.key === "m") {
+      // Toggle sound mute
+      SoundManager.getInstance().toggleMute();
+      this.showSoundStatus();
     }
+  }
+
+  private showSoundStatus(): void {
+    const isMuted = SoundManager.getInstance().isSoundMuted();
+
+    // Create temporary message
+    const message = document.createElement("div");
+    message.textContent = isMuted ? "SOUND: OFF" : "SOUND: ON";
+    message.style.position = "absolute";
+    message.style.top = "10%";
+    message.style.left = "50%";
+    message.style.transform = "translateX(-50%)";
+    message.style.color = "#00FFFF";
+    message.style.fontFamily = "Arial, sans-serif";
+    message.style.fontSize = "24px";
+    message.style.fontWeight = "bold";
+    message.style.textShadow = "0 0 5px #00FFFF";
+    message.style.zIndex = "1001"; // Above game over UI
+    message.id = "sound-status-text";
+
+    // Remove existing message if any
+    const existingMessage = document.getElementById("sound-status-text");
+    if (existingMessage) {
+      document.body.removeChild(existingMessage);
+    }
+
+    document.body.appendChild(message);
+
+    // Remove after 1.5 seconds
+    setTimeout(() => {
+      const textElement = document.getElementById("sound-status-text");
+      if (textElement && textElement.parentNode) {
+        document.body.removeChild(textElement);
+      }
+    }, 1500);
   }
 
   public handleKeyUp(event: KeyboardEvent): void {
@@ -67,15 +117,15 @@ export class GameOverMode implements GameMode {
     // No touch start handling needed
     // Retry button has its own click handler
   }
-  
+
   public handleMouseDown(event: MouseEvent): void {
     // No specific mouse down handling needed for game over mode
   }
-  
+
   public handleMouseUp(event: MouseEvent): void {
     // No specific mouse up handling needed for game over mode
   }
-  
+
   public handleTouchEnd(event: TouchEvent): void {
     // No specific touch end handling needed for game over mode
   }
@@ -91,8 +141,7 @@ export class GameOverMode implements GameMode {
 
   private showGameOver(): void {
     // Explosion sound
-    const audio = new Audio("explosion-1.mp3");
-    audio.play();
+    SoundManager.getInstance().playBigExplosion();
 
     // Create game over container
     const gameOverContainer = document.createElement("div");
@@ -143,12 +192,12 @@ export class GameOverMode implements GameMode {
     retryButton.style.borderRadius = "5px";
     retryButton.style.cursor = "pointer";
     retryButton.style.margin = "20px 0";
-    
+
     // Add event listener for the retry button
     retryButton.addEventListener("click", () => {
       this.restartGame();
     });
-    
+
     gameOverContainer.appendChild(retryButton);
 
     // Instructions
@@ -169,7 +218,7 @@ export class GameOverMode implements GameMode {
     this.gameState.score = 0;
     this.gameState.currentLevel = 1;
     this.gameState.lives = 3; // Reset lives to 3
-    
+
     // The active mode will initialize its own state when created
   }
 }

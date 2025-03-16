@@ -4,10 +4,13 @@ import { GameMode } from "./gameMode";
 import { SceneSetup } from "../scene";
 import { EnemyManager } from "../enemies";
 import { Enemy } from "../enemy";
-import { updateScore, updateCountdownTimer } from "../ui";
+import { updateScore, updateLives, updateCountdownTimer } from "../ui";
 import { createPlayer, animatePlayer } from "../player";
 import { BloodMoon } from "../bloodMoon";
 import { Level, LevelType } from "../levels";
+import { SoundManager } from "../synth";
+
+const maxLevelTime = 60;
 
 export class ActiveMode implements GameMode {
   private sceneSetup: SceneSetup;
@@ -29,6 +32,8 @@ export class ActiveMode implements GameMode {
   private keyMovementInterval: number | null = null;
   private piLevelRotationDirection: number = 1; // 1 for clockwise, -1 for counter-clockwise
   private nextDirectionChangeTime: number = 0;
+  private countdownSound: any = null; // Reference to countdown beeping sound
+  private countdownActive: boolean = false; // Flag to track if countdown is active
 
   // Active mode specific state
   private modeState: ActiveModeState = {
@@ -67,6 +72,19 @@ export class ActiveMode implements GameMode {
   public getPlayer(): THREE.Group {
     return this.player;
   }
+  
+  // Show UI elements when entering active mode
+  private showUIElements(): void {
+    // Show score, lives, level, and timer displays
+    const elementsToShow = ['score', 'lives', 'level', 'countdown-timer'];
+    
+    elementsToShow.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.style.display = 'block';
+      }
+    });
+  }
 
   public enter(): void {
     this.level = new Level(this.gameState.currentLevel, this.levelRadius);
@@ -79,20 +97,29 @@ export class ActiveMode implements GameMode {
     this.bloodMoon.setLevelRadius(this.levelRadius);
     this.bloodMoon.enter();
 
-    // Immediately start the blood moon growing (this will be invisible at first)
-    this.bloodMoon.startGrowing(60);
+    // Show all UI elements that might have been hidden in the marquee mode
+    this.showUIElements();
 
-    // Show the initial countdown time of 60 seconds
-    updateCountdownTimer(60);
+    // Immediately start the blood moon growing (this will be invisible at first)
+    this.bloodMoon.startGrowing(maxLevelTime);
+
+    // Show the initial countdown time of levelTime seconds
+    updateCountdownTimer(maxLevelTime);
 
     // Initialize or update the lives display
-    import("../ui").then((ui) => ui.updateLives(this.gameState));
+    updateLives(this.gameState);
+    
+    // Update the score display
+    updateScore(this.gameState);
+
+    // Start background music
+    SoundManager.getInstance().startBackgroundMusic();
 
     // Display level start messages only on the first level
     if (this.gameState.currentLevel === 1) {
       this.showLevelStartText();
     }
-
+    
     // Reset rotation direction change timer for Pi symbol level
     this.piLevelRotationDirection = Math.random() < 0.5 ? 1 : -1; // Random initial direction
     this.nextDirectionChangeTime =
@@ -105,7 +132,6 @@ export class ActiveMode implements GameMode {
     this.modeState.forcedEnemyType = undefined;
 
     // Set up player movement based on keys
-    // Update player angle based on keys in animation loop
     this.keyMovementInterval = window.setInterval(() => {
       const moveSpeed = 0.1;
 
@@ -135,18 +161,22 @@ export class ActiveMode implements GameMode {
       const remainingSeconds = this.bloodMoon.getRemainingTime();
       updateCountdownTimer(remainingSeconds);
 
-      // Check if time has run out (and not in ghost mode)
-      if (remainingSeconds <= 0 && !this.modeState.ghostMode) {
-        this.handleBloodMoonReachedBoundary();
-        return;
-      }
-    }
+      // Update music tempo based on remaining time
+      SoundManager.getInstance().updateMusicWithTimer(remainingSeconds);
 
-    // Check if the blood moon has reached the level boundary (backup check)
-    if (!this.transitionInProgress && !this.modeState.ghostMode) {
-      const moonProgress = this.bloodMoon.getGrowthProgress();
-      if (moonProgress >= 0.99) {
-        // Moon has reached the boundary, end the game if the player hasn't cleared the level
+      // Start beeping countdown at 10 seconds remaining
+      if (
+        remainingSeconds <= 10 &&
+        remainingSeconds > 0 &&
+        !this.countdownActive
+      ) {
+        this.countdownActive = true;
+        this.countdownSound = SoundManager.getInstance().playCountdown();
+      }
+
+      // Check if time has run out
+      if (this.bloodMoon.isFullyGrown()) {
+        // Force game over if time is completely out, regardless of ghost mode status
         this.handleBloodMoonReachedBoundary();
         return;
       }
@@ -189,7 +219,8 @@ export class ActiveMode implements GameMode {
     ) {
       this.enemyManager.createEnemy(this.level);
 
-      const nextTime = 0.5 + 0.5 * (this.bloodMoon.getRemainingTime() / 60);
+      const nextTime =
+        0.5 + 0.5 * (this.bloodMoon.getRemainingTime() / maxLevelTime);
       this.nextEnemyTime = elapsedTime + 0.5 + Math.random() * nextTime;
     }
 
@@ -220,11 +251,14 @@ export class ActiveMode implements GameMode {
 
       // If player was hit, handle the collision
       if (playerHit) {
+        // Stop sound effects but keep music playing
+        SoundManager.getInstance().stopSoundEffects();
+
         // Decrement lives when player is hit
         this.gameState.lives--;
 
         // Update lives UI
-        import("../ui").then((ui) => ui.updateLives(this.gameState));
+        updateLives(this.gameState);
 
         if (this.gameState.lives <= 0) {
           // Game over if no lives left
@@ -291,6 +325,12 @@ export class ActiveMode implements GameMode {
 
     this.bloodMoon.exit();
 
+    // Stop the countdown sound if active
+    this.stopCountdown();
+
+    // Stop background music
+    SoundManager.getInstance().stopBackgroundMusic();
+
     // Cancel any ongoing intervals
     if (this.keyMovementInterval) {
       clearInterval(this.keyMovementInterval);
@@ -304,13 +344,21 @@ export class ActiveMode implements GameMode {
     }
   }
 
+  // Stop the countdown beeping
+  private stopCountdown(): void {
+    if (this.countdownActive && this.countdownSound) {
+      this.countdownSound.stop();
+      this.countdownSound = null;
+      this.countdownActive = false;
+    }
+  }
+
   public shoot(): void {
     // Don't shoot if in transition or player doesn't exist
     if (this.transitionInProgress) return;
 
     // Play shooting sound
-    // const audio = new Audio("laser-1.mp3");
-    // audio.play();
+    SoundManager.getInstance().playLaser();
 
     // Create a bullet
     const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
@@ -343,6 +391,12 @@ export class ActiveMode implements GameMode {
   public async levelUp(): Promise<void> {
     if (this.transitionInProgress) return;
     this.transitionInProgress = true;
+
+    // Stop countdown beeping if active
+    this.stopCountdown();
+
+    // Stop background music when level completes
+    SoundManager.getInstance().stopBackgroundMusic();
 
     // Show level completed text
     this.showLevelCompletedText();
@@ -403,41 +457,16 @@ export class ActiveMode implements GameMode {
     this.bloodMoon.setLevelRadius(this.levelRadius);
 
     // Start the Blood Moon growing for the new level
-    this.bloodMoon.startGrowing(60);
+    this.bloodMoon.startGrowing(maxLevelTime);
 
     // Reset the countdown timer for the new level
-    updateCountdownTimer(60);
+    updateCountdownTimer(maxLevelTime);
 
-    // No level start messages on level transitions
-
-    // Give a brief period of invulnerability after level change
-    this.modeState.ghostMode = true;
-    this.updateGhostModeDisplay(true);
-
-    // Make the player semi-transparent to indicate invulnerability
-    this.player.traverse((object) => {
-      if (object instanceof THREE.Mesh) {
-        object.material.opacity = 0.5;
-        object.material.transparent = true;
-      }
-    });
+    // Start background music for the new level
+    SoundManager.getInstance().startBackgroundMusic();
 
     // Resume normal gameplay
     this.transitionInProgress = false;
-
-    // End invulnerability after a brief period
-    setTimeout(() => {
-      this.modeState.ghostMode = false;
-      this.updateGhostModeDisplay(false);
-
-      // Restore player opacity
-      this.player.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
-          object.material.opacity = 1.0;
-          object.material.transparent = false;
-        }
-      });
-    }, 2000);
   }
 
   public toggleGhostMode(): void {
@@ -847,6 +876,9 @@ export class ActiveMode implements GameMode {
 
     document.body.appendChild(levelCompleted);
 
+    // Play level complete victory music
+    SoundManager.getInstance().playLevelComplete();
+
     // Remove the text after the transition
     setTimeout(() => {
       const textElement = document.getElementById("level-completed-text");
@@ -859,7 +891,7 @@ export class ActiveMode implements GameMode {
   private showLevelStartText(): void {
     // First message: "The dark moon is rising..."
     const darkMoonText = document.createElement("div");
-    darkMoonText.textContent = "The dark moon is rising...";
+    darkMoonText.textContent = "The BLOOD MOON is rising...";
     darkMoonText.style.position = "absolute";
     darkMoonText.style.top = "10%";
     darkMoonText.style.left = "50%";
@@ -872,6 +904,9 @@ export class ActiveMode implements GameMode {
     darkMoonText.style.opacity = "0";
     darkMoonText.style.transition = "opacity 1s ease-in-out";
     darkMoonText.id = "dark-moon-text";
+
+    // Play level start sound
+    SoundManager.getInstance().playLevelStart();
 
     document.body.appendChild(darkMoonText);
 
@@ -966,6 +1001,9 @@ export class ActiveMode implements GameMode {
       z: this.player.rotation.z,
     };
 
+    // Play ship flying sound
+    const flyingSound = SoundManager.getInstance().playShipFlying();
+
     return new Promise<void>((resolve) => {
       const startTime = Date.now();
 
@@ -1035,6 +1073,9 @@ export class ActiveMode implements GameMode {
               }
             }
           });
+
+          // Stop the flying sound when animation completes
+          flyingSound.stop();
 
           resolve();
         }
@@ -1174,10 +1215,7 @@ export class ActiveMode implements GameMode {
     this.sceneSetup.scene.add(particleSystem);
 
     // Play explosion sound
-    const audio = new Audio();
-    audio.src = "explosion-1.mp3";
-    audio.volume = 0.6;
-    audio.play();
+    SoundManager.getInstance().playBigExplosion();
 
     // Animate the particles
     const updateParticles = () => {
@@ -1223,6 +1261,12 @@ export class ActiveMode implements GameMode {
 
   // Handle when the blood moon reaches the level boundary
   private handleBloodMoonReachedBoundary(): void {
+    // Stop sound effects but keep music playing until game over
+    SoundManager.getInstance().stopSoundEffects();
+
+    // Make sure countdown is explicitly stopped
+    this.stopCountdown();
+
     // Show a warning message
     const warningMessage = document.createElement("div");
     warningMessage.id = "blood-moon-warning";
@@ -1230,19 +1274,23 @@ export class ActiveMode implements GameMode {
     warningMessage.style.top = "30%";
     warningMessage.style.left = "50%";
     warningMessage.style.transform = "translate(-50%, -50%)";
-    warningMessage.style.color = "#FF0000";
+    warningMessage.style.color = "#FFFFFF"; // White text for better visibility
     warningMessage.style.fontFamily = "Arial, sans-serif";
     warningMessage.style.fontSize = "48px";
     warningMessage.style.fontWeight = "bold";
     warningMessage.style.textAlign = "center";
-    warningMessage.style.textShadow = "0 0 10px #FF0000";
+    warningMessage.style.textShadow = "0 0 15px #FF0000, 0 0 25px #FF0000"; // Stronger glow
+    warningMessage.style.background = "rgba(139, 0, 0, 0.5)"; // Semi-transparent dark red background
+    warningMessage.style.padding = "20px 30px";
+    warningMessage.style.borderRadius = "10px";
+    warningMessage.style.border = "2px solid #FF0000";
+    warningMessage.style.boxShadow = "0 0 30px rgba(255, 0, 0, 0.8)"; // Red outer glow
+    warningMessage.style.letterSpacing = "2px"; // Spread out text for readability
     warningMessage.innerHTML = "THE BLOOD MOON HAS CONSUMED YOU";
     document.body.appendChild(warningMessage);
 
-    // Play a sound effect (could be added)
-    // const audio = new Audio("explosion-1.mp3");
-    // audio.volume = 0.8;
-    // audio.play();
+    // Play blood moon sound effect
+    SoundManager.getInstance().playBloodMoonActivation();
 
     // Pause for dramatic effect, then end the game
     setTimeout(() => {
@@ -1300,7 +1348,45 @@ export class ActiveMode implements GameMode {
       case "E": // Add "E" key to return to random enemy spawning
         this.resetEnemySpawning();
         break;
+      case "m": // Add "m" key to toggle sound
+        SoundManager.getInstance().toggleMute();
+        this.showSoundStatus();
+        break;
     }
+  }
+
+  private showSoundStatus(): void {
+    const isMuted = SoundManager.getInstance().isSoundMuted();
+
+    // Create temporary message
+    const message = document.createElement("div");
+    message.textContent = isMuted ? "SOUND: OFF" : "SOUND: ON";
+    message.style.position = "absolute";
+    message.style.top = "10%";
+    message.style.left = "50%";
+    message.style.transform = "translateX(-50%)";
+    message.style.color = "#00FFFF";
+    message.style.fontFamily = "Arial, sans-serif";
+    message.style.fontSize = "24px";
+    message.style.fontWeight = "bold";
+    message.style.textShadow = "0 0 5px #00FFFF";
+    message.id = "sound-status-text";
+
+    // Remove existing message if any
+    const existingMessage = document.getElementById("sound-status-text");
+    if (existingMessage) {
+      document.body.removeChild(existingMessage);
+    }
+
+    document.body.appendChild(message);
+
+    // Remove after 1.5 seconds
+    setTimeout(() => {
+      const textElement = document.getElementById("sound-status-text");
+      if (textElement && textElement.parentNode) {
+        document.body.removeChild(textElement);
+      }
+    }, 1500);
   }
 
   public handleKeyUp(event: KeyboardEvent): void {

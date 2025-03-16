@@ -12,6 +12,7 @@ import {
   LinearMovementController,
 } from "./movementControllers";
 import { Level, LevelType } from "./levels";
+import { SoundManager } from "./synth";
 
 // Class representing an individual enemy
 export class Enemy {
@@ -240,8 +241,7 @@ export class Enemy {
     }
 
     // Play explosion sound
-    // const audio = new Audio("explosion-1.mp3");
-    // audio.play();
+    SoundManager.getInstance().playExplosion();
 
     this.remove();
   }
@@ -493,10 +493,7 @@ export class Enemy {
     }, 500);
 
     // Play a subtle sound for enemy fire
-    const audio = new Audio();
-    audio.volume = 0.3; // Lower volume than player shots
-    audio.src = "laser-1.mp3"; // Reuse the laser sound for now
-    audio.play();
+    SoundManager.getInstance().playEnemyLaser();
   }
 
   // Fire a bomb that explodes on contact with the level boundary
@@ -596,10 +593,7 @@ export class Enemy {
     });
 
     // Play a distinctive sound for bomb firing
-    const audio = new Audio();
-    audio.volume = 0.4;
-    audio.src = "laser-1.mp3"; // Ideally would be a different sound
-    audio.play();
+    SoundManager.getInstance().playBigExplosion();
   }
 
   // Check collision with player
@@ -655,70 +649,70 @@ export class Enemy {
         return {
           hitPoints: 1,
           speedMultiplier: 1.0,
-          points: 10,
+          points: 3,
         };
 
       case 1: // Crosser - always follows spokes but crosses between them
         return {
           hitPoints: 2,
           speedMultiplier: 0.9,
-          points: 15,
+          points: 4,
         };
 
       case 2: // Speeder - follows patterns but moves faster
         return {
           hitPoints: 2,
           speedMultiplier: 1.5, // Faster!
-          points: 20,
+          points: 6,
         };
 
       case 3: // Zigzagger - erratic zig-zag movement
         return {
           hitPoints: 3,
           speedMultiplier: 1.1,
-          points: 30,
+          points: 7,
         };
 
       case 4: // Orbiter - circular orbital movement
         return {
           hitPoints: 3,
           speedMultiplier: 0.8,
-          points: 40,
+          points: 9,
         };
 
       case 5: // Bouncer - bouncing movement pattern
         return {
           hitPoints: 4,
           speedMultiplier: 1.2,
-          points: 30,
+          points: 10,
         };
 
       case 6: // Chaotic - extremely erratic movement
         return {
           hitPoints: 4,
           speedMultiplier: 0.9,
-          points: 40,
+          points: 12,
         };
 
       case 7: // Hunter - attempts to home in on player
         return {
           hitPoints: 5,
           speedMultiplier: 0.7,
-          points: 20,
+          points: 10,
         };
 
       case 8: // Pi-follower - follows pi symbol on pi levels
         return {
           hitPoints: 6,
           speedMultiplier: 0.8,
-          points: 50,
+          points: 15,
         };
 
       case 9: // Advanced Pi-follower - follows pi symbol but faster and more hit points
         return {
           hitPoints: 8,
           speedMultiplier: 1.0,
-          points: 60,
+          points: 17,
         };
 
       case 10:
@@ -732,7 +726,7 @@ export class Enemy {
         return {
           hitPoints: 1,
           speedMultiplier: 1.0,
-          points: 5,
+          points: 3,
         };
     }
   }

@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { GameState, ActiveModeState, Explosion } from "./types";
 import { Enemy } from "./enemy";
 import { Level, LevelType } from "./levels";
+import { SoundManager } from "./synth";
+import { updateScore } from "./ui";
 
 // Class to handle enemy explosions at the level boundary
 class EnemyExplosion {
@@ -251,9 +253,7 @@ class EnemyExplosion {
 
   private playSound(): void {
     try {
-      const audio = new Audio("/explosion-1.mp3");
-      audio.volume = 0.5;
-      audio.play().catch((e) => console.log("Audio play failed:", e));
+      SoundManager.getInstance().playExplosion();
     } catch (error) {
       console.log("Could not play explosion sound:", error);
     }
@@ -355,6 +355,12 @@ export class EnemyManager {
           // Create explosion at the boundary
           this.createBoundaryExplosion(enemy, level);
         }
+
+        this.gameState.score -= Math.floor(enemy.getPoints() / 2);
+        if (this.gameState.score < 0) {
+          this.gameState.score = 0;
+        }
+        updateScore(this.gameState);
 
         // Remove the enemy
         enemy.remove();

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { SoundManager } from "./synth";
 
 export class BloodMoon {
   private moonGroup: THREE.Group;
@@ -11,6 +12,7 @@ export class BloodMoon {
   private animationFrame: number | null = null;
   private isShrinking: boolean = false;
   private isGrowing: boolean = false;
+  private fullyGrown: boolean = false;
   private growthStart: number = 0;
   private growthDuration?: number;
   private shrinkStart: number = 0;
@@ -116,8 +118,14 @@ export class BloodMoon {
    * Start growing the blood moon towards the level boundary
    */
   public startGrowing(duration: number): void {
+    // Play blood moon sound when growing starts (for longer durations only)
+    if (duration > 10) {
+      SoundManager.getInstance().playBloodMoonActivation();
+    }
+
     this.growthDuration = duration * 1000; // Convert seconds to milliseconds
     this.isGrowing = true;
+    this.fullyGrown = false;
     this.growthStart = Date.now();
   }
 
@@ -151,6 +159,10 @@ export class BloodMoon {
     return Math.ceil(remainingTime / 1000); // Return seconds, rounded up
   }
 
+  public isFullyGrown(): boolean {
+    return this.fullyGrown;
+  }
+
   /**
    * Immediately remove the blood moon from the scene
    * Use this for cleanup when transitioning between game modes
@@ -174,6 +186,7 @@ export class BloodMoon {
     // Reset flags
     this.isShrinking = false;
     this.isGrowing = false;
+    this.fullyGrown = false;
 
     // Reset group position to center
     this.moonGroup.position.set(0, 0, 0);
@@ -242,6 +255,7 @@ export class BloodMoon {
       // When growth is complete, keep the final size
       if (growthProgress === 1) {
         this.isGrowing = false;
+        this.fullyGrown = true;
       }
     } else if (this.isShrinking) {
       // Calculate shrink progress
