@@ -131,7 +131,8 @@ export class Level {
 
   // Helper method to get the Pi symbol vertices
   public getPiSymbolVertices(scale: number = this.radius * 0.5): number[] {
-    return [
+    // Define the base vertices of the Pi symbol
+    const baseVertices = [
       // Top horizontal line
       -0.6 * scale,
       0.5 * scale,
@@ -156,6 +157,22 @@ export class Level {
       -0.3 * scale,
       0,
     ];
+    
+    // Apply the current rotation of the level to the vertices
+    const rotationZ = this.group.rotation.z;
+    const rotatedVertices = [...baseVertices]; // Copy the base vertices
+    
+    // Apply rotation to each vertex (they are stored as x,y,z triplets)
+    for (let i = 0; i < rotatedVertices.length; i += 3) {
+      const x = rotatedVertices[i];
+      const y = rotatedVertices[i + 1];
+      
+      // Apply rotation transform
+      rotatedVertices[i] = x * Math.cos(rotationZ) - y * Math.sin(rotationZ);
+      rotatedVertices[i + 1] = x * Math.sin(rotationZ) + y * Math.cos(rotationZ);
+    }
+    
+    return rotatedVertices;
   }
 
   public collidesWithEnemy(enemy: Enemy): boolean {

@@ -328,11 +328,11 @@ export class Enemy {
       this.mesh.userData.originalColor = material.color.clone();
       this.mesh.userData.originalEmissive = material.emissive.clone();
       this.mesh.userData.originalEmissiveIntensity = material.emissiveIntensity;
-      
+
       // Store a reference to any active recolorTimer
       this.mesh.userData.recolorTimer = null;
     }
-    
+
     // Clear any existing recolor timeout to prevent race conditions
     if (this.mesh.userData.recolorTimer) {
       clearTimeout(this.mesh.userData.recolorTimer);
@@ -355,7 +355,7 @@ export class Enemy {
           if (this.mesh.userData.originalColor) {
             material.color.copy(this.mesh.userData.originalColor);
           }
-          
+
           // Restore original emissive color
           if (this.mesh.userData.originalEmissive) {
             material.emissive.copy(this.mesh.userData.originalEmissive);
@@ -365,14 +365,15 @@ export class Enemy {
             const color = new THREE.Color().setHSL(hue, 1, 0.5);
             material.emissive.copy(color);
           }
-          
+
           // Restore original emissive intensity
           if (this.mesh.userData.originalEmissiveIntensity !== undefined) {
-            material.emissiveIntensity = this.mesh.userData.originalEmissiveIntensity;
+            material.emissiveIntensity =
+              this.mesh.userData.originalEmissiveIntensity;
           } else {
             material.emissiveIntensity = 0.5; // Default fallback
           }
-          
+
           // Clear the timer reference
           this.mesh.userData.recolorTimer = null;
         } catch (e) {

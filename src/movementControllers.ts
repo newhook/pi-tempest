@@ -819,26 +819,67 @@ export class PiMovementController extends BaseMovementController {
   private calculatePosition(): { x: number; y: number } {
     let x, y;
 
+    // Get the latest Pi symbol vertices from the level
+    // This ensures we're using the current rotated positions
+    const piVertices = this.enemy.level.getPiSymbolVertices();
+
+    // Update the Pi symbol vertices to reflect current rotation
+    // Top horizontal line
+    this.horizontalBarStart = {
+      x: piVertices[0],
+      y: piVertices[1],
+    };
+    this.horizontalBarEnd = {
+      x: piVertices[3],
+      y: piVertices[4],
+    };
+
+    // Left vertical line
+    this.leftLegStart = {
+      x: piVertices[6],
+      y: piVertices[7],
+    };
+    this.leftLegEnd = {
+      x: piVertices[9],
+      y: piVertices[10],
+    };
+
+    // Right vertical line
+    this.rightLegStart = {
+      x: piVertices[12],
+      y: piVertices[13],
+    };
+    this.rightLegEnd = {
+      x: piVertices[15],
+      y: piVertices[16],
+    };
+
     switch (this.currentPart) {
       case 0: // Horizontal bar
         // Interpolate along the bar based on progress
         x =
           this.horizontalBarStart.x +
           (this.horizontalBarEnd.x - this.horizontalBarStart.x) * this.progress;
-        y = this.horizontalBarStart.y; // Y remains constant for horizontal bar
+        y = 
+          this.horizontalBarStart.y +
+          (this.horizontalBarEnd.y - this.horizontalBarStart.y) * this.progress;
         break;
 
       case 1: // Left leg
-        x = this.leftLegStart.x; // X remains constant for vertical leg
         // Interpolate along the left leg based on progress
+        x = 
+          this.leftLegStart.x +
+          (this.leftLegEnd.x - this.leftLegStart.x) * this.progress;
         y =
           this.leftLegStart.y +
           (this.leftLegEnd.y - this.leftLegStart.y) * this.progress;
         break;
 
       case 2: // Right leg
-        x = this.rightLegStart.x; // X remains constant for vertical leg
         // Interpolate along the right leg based on progress
+        x = 
+          this.rightLegStart.x +
+          (this.rightLegEnd.x - this.rightLegStart.x) * this.progress;
         y =
           this.rightLegStart.y +
           (this.rightLegEnd.y - this.rightLegStart.y) * this.progress;

@@ -22,7 +22,7 @@ export class Game {
     // Initialize game state with only shared properties
     this.gameState = {
       score: 0,
-      currentLevel: 1,
+      currentLevel: 5,
       gameStatus: "marquee",
       lives: 3, // Start with three lives
     };
@@ -89,7 +89,7 @@ export class Game {
       // Forward the event to the current mode
       this.currentMode.handleClick(event);
     });
-    
+
     document.addEventListener("mouseup", (event: MouseEvent) => {
       // Forward the event to the current mode
       if (this.currentMode.handleMouseUp) {
@@ -111,7 +111,7 @@ export class Game {
       // Forward the event to the current mode
       this.currentMode.handleTouchStart(event);
     });
-    
+
     document.addEventListener("touchend", (event: TouchEvent) => {
       // Forward the event to the current mode
       if (this.currentMode.handleTouchEnd) {
