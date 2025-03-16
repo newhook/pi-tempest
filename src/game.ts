@@ -22,7 +22,7 @@ export class Game {
     // Initialize game state with only shared properties
     this.gameState = {
       score: 0,
-      currentLevel: 5,
+      currentLevel: 1,
       gameStatus: "marquee",
       lives: 3, // Start with three lives
     };
