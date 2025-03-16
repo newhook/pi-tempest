@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GameState, ActiveModeState, MovementController } from "./types";
 import { createMovementController } from "./movementControllers";
+import { Level } from "./levels";
 
 // Class representing an individual enemy
 export class Enemy {
@@ -20,8 +21,7 @@ export class Enemy {
   public gameState: GameState; // Changed to public for access by controllers
   public modeState: ActiveModeState; // Changed to public for access by controllers
   public scene: THREE.Scene; // Changed to public for access by controllers
-  // Number of spokes in the current level (needed for spoke movement)
-  public numSpokes: number = 8; // Changed to public for access by controllers
+  public level: Level;
   private lastFireTime: number = 0; // Track time since last bullet fired
   // For zigzag tracking
   public originalAngle?: number;
@@ -38,6 +38,7 @@ export class Enemy {
   };
 
   constructor(
+    level: Level,
     mesh: THREE.Mesh,
     angle: number,
     distanceFromCenter: number,
@@ -63,6 +64,7 @@ export class Enemy {
     this.gameState = gameState;
     this.modeState = modeState;
     this.direction = direction;
+    this.level = level;
 
     // Create the appropriate movement controller based on movement style
     this.movementController = createMovementController(movementStyle);
@@ -74,20 +76,12 @@ export class Enemy {
   }
 
   // Update enemy position based on movement style
-  update(delta: number, levelRadius: number, numSpokes: number = 8): void {
-    // Store level's number of spokes for movement
-    // This will be used in subsequent movement controller updates
-    this.numSpokes = numSpokes;
-
+  update(delta: number): void {
     // Increment distance from center for all movement types
     this.distanceFromCenter += this.speed * delta * 30;
 
     // Use the movement controller to update position and angle
-    const result = this.movementController.update(
-      delta,
-      levelRadius,
-      numSpokes
-    );
+    const result = this.movementController.update(delta);
 
     // Apply the position and angle from the controller
     this.mesh.position.set(result.x, result.y, 0);
@@ -98,7 +92,7 @@ export class Enemy {
     this.mesh.rotation.y += delta * 2;
 
     // Scale enemy as it moves outward for better visibility
-    const scale = 0.5 + this.distanceFromCenter / (levelRadius * 2);
+    const scale = 0.5 + this.distanceFromCenter / (this.level.getRadius() * 2);
     this.mesh.scale.set(scale, scale, scale);
 
     // Call the movement controller's optional render method for special effects
@@ -497,6 +491,7 @@ export class Enemy {
         this.scene,
         this.gameState,
         this.modeState,
+        this.spokes,
         randomDirection
       );
 

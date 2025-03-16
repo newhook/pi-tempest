@@ -1,38 +1,24 @@
 import * as THREE from "three";
 import { GameState, ActiveModeState } from "./types";
 import { Enemy } from "./enemy";
+import { Level } from "./levels";
 
 export class EnemyManager {
   private scene: THREE.Scene;
   private gameState: GameState;
   private modeState: ActiveModeState;
-  private levelRadius: number;
-  private numSpokes: number = 8; // Number of spokes in the wheel
 
   constructor(
     scene: THREE.Scene,
     gameState: GameState,
-    modeState: ActiveModeState,
-    levelRadius: number
+    modeState: ActiveModeState
   ) {
     this.scene = scene;
     this.gameState = gameState;
     this.modeState = modeState;
-    this.levelRadius = levelRadius;
-
-    // Set number of spokes based on level
-    this.updateSpokeCount();
   }
 
-  private updateSpokeCount(): void {
-    // Adjust spoke count based on level
-    this.numSpokes = Math.min(
-      16,
-      8 + Math.floor(this.gameState.currentLevel / 2)
-    );
-  }
-
-  createEnemy(): void {
+  createEnemy(level: Level): void {
     // Determine the available enemy types based on level
     // Level 1: types 0, 1
     // Level 2: types 0, 1, 2, 3
@@ -148,10 +134,12 @@ export class EnemyManager {
     console.log("enemyType", enemyType);
     console.log("movementStyle", movementStyle);
 
+    const numSpokes = level.getSpokeCount();
+
     // If using spoke movement, calculate spoke-specific angle
     if (movementStyle === "spoke" || movementStyle === "spokeCrossing") {
-      const spokeIndex = Math.floor(Math.random() * this.numSpokes);
-      angle = (spokeIndex / this.numSpokes) * Math.PI * 2;
+      const spokeIndex = Math.floor(Math.random() * numSpokes);
+      angle = (spokeIndex / numSpokes) * Math.PI * 2;
     }
 
     // Assign hitpoints and speed based on enemy type
@@ -179,6 +167,7 @@ export class EnemyManager {
 
     // Create the enemy object
     const enemy = new Enemy(
+      level,
       mesh,
       angle,
       0, // distanceFromCenter starts at 0
@@ -194,7 +183,7 @@ export class EnemyManager {
 
     // Store spoke information for enemies on spokes
     if (movementStyle === "spoke" || movementStyle === "spokeCrossing") {
-      enemy.spokeIndex = Math.floor((angle / (Math.PI * 2)) * this.numSpokes);
+      enemy.spokeIndex = Math.floor((angle / (Math.PI * 2)) * numSpokes);
       enemy.spokeCrossingDirection = Math.random() > 0.5 ? 1 : -1; // clockwise or counterclockwise
       enemy.spokeCrossingSpeed = 0.01 + Math.random() * 0.03; // random speed for crossing
     }
@@ -260,13 +249,10 @@ export class EnemyManager {
   }
 
   update(delta: number): void {
-    // Update number of spokes if level changed
-    this.updateSpokeCount();
-
     // Move all enemies based on their movement style
     for (const enemy of this.modeState.enemies) {
       // Use the unified update method for all enemy types
-      enemy.update(delta, this.levelRadius, this.numSpokes);
+      enemy.update(delta);
     }
 
     // Remove enemies that are past the level radius

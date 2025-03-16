@@ -106,7 +106,7 @@ export class ActiveMode implements GameMode {
 
     // Create new enemies periodically
     if (elapsedTime - this.lastEnemyTime > 1.5 && !this.transitionInProgress) {
-      this.enemyManager.createEnemy();
+      this.enemyManager.createEnemy(this.level);
       this.lastEnemyTime = elapsedTime;
     }
 
