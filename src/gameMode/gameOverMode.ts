@@ -14,8 +14,10 @@ export class GameOverMode implements GameMode {
   }
 
   public enter(): void {
-    // Stop any lingering sounds
-    SoundManager.getInstance().stopAllSounds();
+    // Let the background music play for a moment before stopping
+    setTimeout(() => {
+      SoundManager.getInstance().stopAllSounds();
+    }, 2000);
     
     // Display game over UI
     this.showGameOver();

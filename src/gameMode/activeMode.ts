@@ -91,6 +91,9 @@ export class ActiveMode implements GameMode {
     // Initialize or update the lives display
     import("../ui").then((ui) => ui.updateLives(this.gameState));
 
+    // Start background music
+    SoundManager.getInstance().startBackgroundMusic();
+
     // Display level start messages only on the first level
     if (this.gameState.currentLevel === 1) {
       this.showLevelStartText();
@@ -138,6 +141,9 @@ export class ActiveMode implements GameMode {
       const remainingSeconds = this.bloodMoon.getRemainingTime();
       updateCountdownTimer(remainingSeconds);
 
+      // Update music tempo based on remaining time
+      SoundManager.getInstance().updateMusicWithTimer(remainingSeconds);
+
       // Start beeping countdown at 10 seconds remaining
       if (remainingSeconds <= 10 && remainingSeconds > 0 && !this.countdownActive && !this.modeState.ghostMode) {
         this.countdownActive = true;
@@ -149,17 +155,26 @@ export class ActiveMode implements GameMode {
         this.stopCountdown();
       }
 
-      // Check if time has run out (and not in ghost mode)
-      if (remainingSeconds <= 0 && !this.modeState.ghostMode) {
+      // Check if time has run out
+      if (remainingSeconds <= 0) {
+        // Force game over if time is completely out, regardless of ghost mode status
         this.handleBloodMoonReachedBoundary();
         return;
       }
     }
 
     // Check if the blood moon has reached the level boundary (backup check)
-    if (!this.transitionInProgress && !this.modeState.ghostMode) {
+    if (!this.transitionInProgress) {
       const moonProgress = this.bloodMoon.getGrowthProgress();
-      if (moonProgress >= 0.99) {
+      // Force the game over sequence if progress is 100%, even in ghost mode
+      // This ensures the game can't get stuck in a state where the moon is fully grown but nothing happens
+      if (moonProgress >= 1.0) {
+        // Moon has completely reached the boundary, force game over regardless of ghost mode
+        this.handleBloodMoonReachedBoundary();
+        return;
+      }
+      // Normal boundary check (respects ghost mode)
+      else if (!this.modeState.ghostMode && moonProgress >= 0.99) {
         // Moon has reached the boundary, end the game if the player hasn't cleared the level
         this.handleBloodMoonReachedBoundary();
         return;
@@ -234,8 +249,8 @@ export class ActiveMode implements GameMode {
 
       // If player was hit, handle the collision
       if (playerHit) {
-        // Stop current sounds
-        SoundManager.getInstance().stopAllSounds();
+        // Stop sound effects but keep music playing
+        SoundManager.getInstance().stopSoundEffects();
 
         // Decrement lives when player is hit
         this.gameState.lives--;
@@ -310,6 +325,9 @@ export class ActiveMode implements GameMode {
 
     // Stop the countdown sound if active
     this.stopCountdown();
+    
+    // Stop background music
+    SoundManager.getInstance().stopBackgroundMusic();
 
     // Cancel any ongoing intervals
     if (this.keyMovementInterval) {
@@ -374,6 +392,9 @@ export class ActiveMode implements GameMode {
     
     // Stop countdown beeping if active
     this.stopCountdown();
+    
+    // Stop background music when level completes
+    SoundManager.getInstance().stopBackgroundMusic();
 
     // Show level completed text
     this.showLevelCompletedText();
@@ -438,6 +459,9 @@ export class ActiveMode implements GameMode {
 
     // Reset the countdown timer for the new level
     updateCountdownTimer(60);
+
+    // Start background music for the new level
+    SoundManager.getInstance().startBackgroundMusic();
 
     // No level start messages on level transitions
 
@@ -1263,11 +1287,24 @@ export class ActiveMode implements GameMode {
 
   // Handle when the blood moon reaches the level boundary
   private handleBloodMoonReachedBoundary(): void {
-    // Stop any ongoing sounds
-    SoundManager.getInstance().stopAllSounds();
+    // Stop sound effects but keep music playing until game over
+    SoundManager.getInstance().stopSoundEffects();
     
     // Make sure countdown is explicitly stopped
     this.stopCountdown();
+    
+    // Ensure ghost mode is disabled to prevent getting stuck
+    if (this.modeState.ghostMode) {
+      this.modeState.ghostMode = false;
+      
+      // Restore player opacity
+      this.player.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.material.opacity = 1.0;
+          object.material.transparent = false;
+        }
+      });
+    }
 
     // Show a warning message
     const warningMessage = document.createElement("div");
