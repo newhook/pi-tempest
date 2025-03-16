@@ -19,22 +19,16 @@ import { Level, LevelType } from "./levels";
 // Class representing an individual enemy
 export class Enemy {
   public mesh: THREE.Mesh;
-  public angle: number;
   public distanceFromCenter: number;
   public speed: number;
   public type: number;
   public size: number;
   public hitPoints: number;
-  public direction?: THREE.Vector2;
   public gameState: GameState; // Changed to public for access by controllers
   public modeState: ActiveModeState; // Changed to public for access by controllers
   public scene: THREE.Scene; // Changed to public for access by controllers
   public level: Level;
   private lastFireTime: number = 0; // Track time since last bullet fired
-  // For zigzag tracking
-  public originalAngle?: number;
-
-  // Movement controller to handle specific movement patterns
   private movementController: MovementController;
 
   constructor(
@@ -55,10 +49,6 @@ export class Enemy {
 
     // Get the current level type
     const levelType = level.levelType;
-
-    // Generate a random angle for initial positioning
-    // Add random offset to ensure enemies don't all follow the same path
-    this.angle = Math.random() * Math.PI * 2;
 
     // Assign movement style based on enemy type
     switch (type) {
@@ -116,9 +106,6 @@ export class Enemy {
         break;
 
       case 10: // Type 10:  linear movement
-        const angle = Math.random() * Math.PI * 2;
-        this.direction = new THREE.Vector2(Math.cos(angle), Math.sin(angle));
-        this.angle = Math.atan2(this.direction.y, this.direction.x);
         this.distanceFromCenter = Math.sqrt(
           mesh.position.x * mesh.position.x + mesh.position.y * mesh.position.y
         );
@@ -148,7 +135,6 @@ export class Enemy {
 
     // Apply the position and angle from the controller
     this.mesh.position.set(result.x, result.y, 0);
-    this.angle = result.angle;
 
     // Rotate enemy for visual effect
     this.mesh.rotation.x += delta * 2;
