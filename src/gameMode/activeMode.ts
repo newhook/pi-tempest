@@ -850,8 +850,8 @@ export class ActiveMode implements GameMode {
 
     document.body.appendChild(levelCompleted);
 
-    // Play power-up/level complete sound
-    SoundManager.getInstance().playPowerUp();
+    // Play level complete victory music
+    SoundManager.getInstance().playLevelComplete();
 
     // Remove the text after the transition
     setTimeout(() => {
@@ -974,6 +974,9 @@ export class ActiveMode implements GameMode {
       y: this.player.rotation.y,
       z: this.player.rotation.z,
     };
+    
+    // Play ship flying sound
+    const flyingSound = SoundManager.getInstance().playShipFlying();
 
     return new Promise<void>((resolve) => {
       const startTime = Date.now();
@@ -1045,6 +1048,9 @@ export class ActiveMode implements GameMode {
             }
           });
 
+          // Stop the flying sound when animation completes
+          flyingSound.stop();
+          
           resolve();
         }
 

@@ -238,6 +238,89 @@ export class LevelStartSound extends SoundEffect {
   }
 }
 
+// Level completion victory sound
+export class LevelCompleteSound extends SoundEffect {
+  play(): void {
+    const baseNotes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+    const notes = [...baseNotes, 1318.51, 1567.98]; // Add E6, G6
+    
+    // Play arpeggiated chord
+    notes.forEach((frequency, index) => {
+      const oscillator = this.context.createOscillator();
+      const gain = this.context.createGain();
+      
+      // Add chorus effect with secondary oscillator
+      const detuneOsc = this.context.createOscillator();
+      const detuneGain = this.context.createGain();
+      
+      // Connect main oscillator
+      oscillator.connect(gain);
+      gain.connect(this.context.destination);
+      
+      // Connect chorus oscillator
+      detuneOsc.connect(detuneGain);
+      detuneGain.connect(this.context.destination);
+      
+      // Configure oscillators
+      oscillator.type = 'square';
+      oscillator.frequency.value = frequency;
+      
+      detuneOsc.type = 'triangle'; 
+      detuneOsc.frequency.value = frequency * 1.005; // Slight detuning for chorus effect
+      
+      const startTime = this.context.currentTime + index * 0.1;
+      const duration = 0.3;
+      
+      // Main oscillator envelope
+      gain.gain.setValueAtTime(0.2, startTime);
+      gain.gain.linearRampToValueAtTime(0.3, startTime + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+      
+      // Chorus oscillator envelope (quieter)
+      detuneGain.gain.setValueAtTime(0.1, startTime);
+      detuneGain.gain.linearRampToValueAtTime(0.15, startTime + 0.1);
+      detuneGain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+      
+      // Start and stop both oscillators
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration);
+      
+      detuneOsc.start(startTime);
+      detuneOsc.stop(startTime + duration);
+      
+      // Track these sounds
+      trackSound(oscillator);
+      trackSound(detuneOsc);
+    });
+    
+    // Add final triumphant chord
+    setTimeout(() => {
+      const chordFrequencies = [523.25, 659.25, 783.99, 1046.50]; // C major chord
+      
+      chordFrequencies.forEach(frequency => {
+        const oscillator = this.context.createOscillator();
+        const gain = this.context.createGain();
+        
+        oscillator.connect(gain);
+        gain.connect(this.context.destination);
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        
+        gain.gain.setValueAtTime(0.15, this.context.currentTime);
+        gain.gain.linearRampToValueAtTime(0.2, this.context.currentTime + 0.2);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 1.0);
+        
+        oscillator.start();
+        oscillator.stop(this.context.currentTime + 1.0);
+        
+        // Track this sound
+        trackSound(oscillator);
+      });
+    }, notes.length * 100 + 50);
+  }
+}
+
 // Power-up collected sound
 export class PowerUpSound extends SoundEffect {
   play(): void {
@@ -264,6 +347,89 @@ export class PowerUpSound extends SoundEffect {
     
     // Track this sound
     trackSound(oscillator);
+  }
+}
+
+// Ship flying sound
+export class ShipFlyingSound extends SoundEffect {
+  private stopTime: number = 0;
+  private oscillators: OscillatorNode[] = [];
+  private gains: GainNode[] = [];
+  
+  play(): void {
+    // Create main engine sound - sweeping frequency
+    const mainOsc = this.context.createOscillator();
+    const mainGain = this.context.createGain();
+    
+    // Create filter for engine sound
+    const filter = this.context.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(800, this.context.currentTime);
+    filter.frequency.linearRampToValueAtTime(2000, this.context.currentTime + 2);
+    filter.Q.value = 5;
+    
+    // Connect nodes
+    mainOsc.connect(filter);
+    filter.connect(mainGain);
+    mainGain.connect(this.context.destination);
+    
+    // Configure oscillator
+    mainOsc.type = 'sawtooth';
+    mainOsc.frequency.setValueAtTime(100, this.context.currentTime);
+    mainOsc.frequency.exponentialRampToValueAtTime(800, this.context.currentTime + 2);
+    
+    // Configure gain - ramp up then sustain
+    mainGain.gain.setValueAtTime(0.01, this.context.currentTime);
+    mainGain.gain.linearRampToValueAtTime(0.15, this.context.currentTime + 0.5);
+    
+    // Create secondary effect - pulsing high frequency
+    const pulseOsc = this.context.createOscillator();
+    const pulseGain = this.context.createGain();
+    
+    pulseOsc.connect(pulseGain);
+    pulseGain.connect(this.context.destination);
+    
+    pulseOsc.type = 'sine';
+    pulseOsc.frequency.setValueAtTime(1200, this.context.currentTime);
+    pulseOsc.frequency.linearRampToValueAtTime(3000, this.context.currentTime + 2);
+    
+    // Pulse the volume for effect
+    const pulseRate = 8; // Hz
+    for (let i = 0; i < 16; i++) {
+      const t = this.context.currentTime + i/pulseRate;
+      const pulseVal = i % 2 === 0 ? 0.1 : 0.01;
+      pulseGain.gain.setValueAtTime(pulseVal, t);
+    }
+    
+    // Start oscillators
+    mainOsc.start();
+    pulseOsc.start();
+    
+    // Store for stopping later
+    this.oscillators = [mainOsc, pulseOsc];
+    this.gains = [mainGain, pulseGain];
+    this.stopTime = this.context.currentTime + 2; // Default stop time
+    
+    // Track these sounds
+    trackSound(mainOsc);
+    trackSound(pulseOsc);
+  }
+  
+  stop(): void {
+    const fadeOutTime = 0.3;
+    const now = this.context.currentTime;
+    
+    // Fade out all gains
+    this.gains.forEach(gain => {
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(gain.gain.value, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + fadeOutTime);
+    });
+    
+    // Stop all oscillators after fade out
+    this.oscillators.forEach(osc => {
+      osc.stop(now + fadeOutTime + 0.01);
+    });
   }
 }
 
@@ -358,10 +524,26 @@ export class SoundManager {
     }
   }
   
+  public playLevelComplete(): void {
+    if (!this.isMuted) {
+      new LevelCompleteSound().play();
+    }
+  }
+  
   public playBloodMoonActivation(): void {
     if (!this.isMuted) {
       new BloodMoonSound().play();
     }
+  }
+  
+  // For ship flying to center
+  public playShipFlying(): ShipFlyingSound {
+    if (!this.isMuted) {
+      const flyingSound = new ShipFlyingSound();
+      flyingSound.play();
+      return flyingSound;
+    }
+    return new ShipFlyingSound(); // Return dummy instance if muted
   }
   
   public mute(): void {
