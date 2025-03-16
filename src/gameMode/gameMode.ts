@@ -56,4 +56,22 @@ export interface GameMode {
    * @param event The touch event to handle
    */
   handleTouchStart(event: TouchEvent): void;
+  
+  /**
+   * Handle mouse down events
+   * @param event The mouse event to handle
+   */
+  handleMouseDown?(event: MouseEvent): void;
+  
+  /**
+   * Handle mouse up events
+   * @param event The mouse event to handle
+   */
+  handleMouseUp?(event: MouseEvent): void;
+  
+  /**
+   * Handle touch end events
+   * @param event The touch event to handle
+   */
+  handleTouchEnd?(event: TouchEvent): void;
 }

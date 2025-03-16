@@ -10,6 +10,7 @@ export interface GameState {
   score: number;
   gameStatus: GameStatus;
   currentLevel: number;
+  lives: number; // Player's remaining lives
 }
 
 // Active mode specific state

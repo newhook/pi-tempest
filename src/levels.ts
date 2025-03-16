@@ -53,6 +53,26 @@ export class Level {
     this.addPiDigits();
   }
 
+  // Rotate the level by the given angle (in radians)
+  public rotateLevel(angle: number): void {
+    // Rotate the entire level group
+    this.group.rotation.z += angle;
+
+    // Update all spoke positions
+    for (let i = 0; i < this.spokePositions.length; i++) {
+      const spoke = this.spokePositions[i];
+
+      // Update the spoke angle
+      spoke.angle += angle;
+
+      // Calculate new outer coordinates based on the rotated angle
+      spoke.outerX = Math.cos(spoke.angle) * this.radius;
+      spoke.outerY = Math.sin(spoke.angle) * this.radius;
+
+      // Inner coordinates remain at 0,0 for center-radiating spokes
+    }
+  }
+
   // Add pi digits as background decoration
   private addPiDigits(): void {
     const PI_DIGITS = "3.14159265358979323846";
@@ -111,7 +131,8 @@ export class Level {
 
   // Helper method to get the Pi symbol vertices
   public getPiSymbolVertices(scale: number = this.radius * 0.5): number[] {
-    return [
+    // Define the base vertices of the Pi symbol
+    const baseVertices = [
       // Top horizontal line
       -0.6 * scale,
       0.5 * scale,
@@ -136,6 +157,23 @@ export class Level {
       -0.3 * scale,
       0,
     ];
+
+    // Apply the current rotation of the level to the vertices
+    const rotationZ = this.group.rotation.z;
+    const rotatedVertices = [...baseVertices]; // Copy the base vertices
+
+    // Apply rotation to each vertex (they are stored as x,y,z triplets)
+    for (let i = 0; i < rotatedVertices.length; i += 3) {
+      const x = rotatedVertices[i];
+      const y = rotatedVertices[i + 1];
+
+      // Apply rotation transform
+      rotatedVertices[i] = x * Math.cos(rotationZ) - y * Math.sin(rotationZ);
+      rotatedVertices[i + 1] =
+        x * Math.sin(rotationZ) + y * Math.cos(rotationZ);
+    }
+
+    return rotatedVertices;
   }
 
   public collidesWithEnemy(enemy: Enemy): boolean {
@@ -144,35 +182,48 @@ export class Level {
     const enemyDistanceFromCenter = Math.sqrt(
       enemyPos.x * enemyPos.x + enemyPos.y * enemyPos.y
     );
-    
+
     // Include the enemy's size in the collision check
     // This ensures we detect collision when the enemy's edge touches the level boundary
     const effectiveDistance = enemyDistanceFromCenter + enemy.size;
-    
+
     // Check if enemy has reached or passed the outer boundary of the level
     switch (this.levelType) {
       case LevelType.Star:
         // For star levels, collision depends on the angle (star points extend further than inward sections)
-        const angle = Math.atan2(enemyPos.y, enemyPos.x);
+        // Get normalized angle between 0 and 2π
+        let angle = Math.atan2(enemyPos.y, enemyPos.x);
+        if (angle < 0) angle += Math.PI * 2;
+
         const starPoints = 3 + (this.levelNumber % 5);
-        const anglePerPoint = (Math.PI * 2) / starPoints;
-        const pointIndex = Math.floor(angle / anglePerPoint);
-        const pointAngle = pointIndex * anglePerPoint;
-        
-        // Calculate radius at this angle (alternating between outer point and inner corner)
-        const isOuterPoint = pointIndex % 2 === 0;
-        const radiusAtAngle = isOuterPoint ? this.radius : this.radius * 0.6;
-        
+        const totalVertices = starPoints * 2; // Total vertices (inner + outer points)
+        const anglePerVertex = (Math.PI * 2) / totalVertices;
+
+        // Determine which segment of the star we're in
+        const vertexIndex = Math.floor(angle / anglePerVertex);
+
+        // Calculate progress within the current segment (0 to 1)
+        const segmentProgress = (angle % anglePerVertex) / anglePerVertex;
+
+        // Get the radii of the current and next vertex
+        const currentIsOuter = vertexIndex % 2 === 0;
+        const currentRadius = currentIsOuter ? this.radius : this.radius * 0.6;
+        const nextRadius = currentIsOuter ? this.radius * 0.6 : this.radius;
+
+        // Interpolate radius based on progress within the segment
+        const radiusAtAngle =
+          currentRadius + (nextRadius - currentRadius) * segmentProgress;
+
         return effectiveDistance >= radiusAtAngle;
-        
+
       case LevelType.Wave:
         // For wave levels, boundary has a sine wave pattern
         const waveAngle = Math.atan2(enemyPos.y, enemyPos.x);
         const amplitude = this.radius * 0.05; // Same amplitude as in createWaveLevel
         const waveRadius = this.radius + Math.sin(waveAngle * 3.14) * amplitude;
-        
+
         return effectiveDistance >= waveRadius;
-        
+
       case LevelType.PiSymbol:
       case LevelType.Circle:
       case LevelType.Spiral:
